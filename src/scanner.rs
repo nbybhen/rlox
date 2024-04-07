@@ -1,4 +1,4 @@
-use crate::token::Token;
+use crate::token::{Token, TokenLiteral};
 use crate::tokentype::TokenType;
 use std::collections::HashMap;
 
@@ -51,7 +51,7 @@ impl<'a> Scanner<'a> {
         self.tokens.push(Token{
             tokentype: ty, 
             lexeme: text.to_string(),
-            literal: None,
+            literal: TokenLiteral::Nil,
             line: self.line
         });
     }
@@ -61,7 +61,7 @@ impl<'a> Scanner<'a> {
         self.tokens.push(Token {
             tokentype: ty,
             lexeme: text.to_string(),
-            literal: None,
+            literal: TokenLiteral::String{value: text.to_string()},
             line: self.line
         });
     }
@@ -71,7 +71,7 @@ impl<'a> Scanner<'a> {
         self.tokens.push(Token {
             tokentype: ty,
             lexeme: value.to_string(),
-            literal: Some(value),
+            literal: TokenLiteral::Number{value},
             line: self.line
         });
     }
@@ -127,7 +127,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    // Creates Identifier token
+    // Creates Identifier / Keyword token(s)
     fn identifier(&mut self) {
         while self.peek().is_alphanumeric() {
             self.advance();
@@ -215,7 +215,7 @@ impl<'a> Scanner<'a> {
         self.tokens.push(Token{
             tokentype: TokenType::EOF,
             lexeme: String::new(),
-            literal: None,
+            literal: TokenLiteral::Nil,
             line: self.line});
 
         &self.tokens

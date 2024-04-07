@@ -7,6 +7,7 @@ use std::io::Write;
 mod scanner;
 mod tokentype;
 mod token;
+mod parser;
 
 use crate::token::Token;
 
