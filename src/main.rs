@@ -10,7 +10,8 @@ mod token;
 mod parser;
 
 use crate::token::Token;
-
+use crate::parser::Parser;
+use crate::parser::print;
 
 struct App {
     had_error: bool
@@ -62,6 +63,11 @@ impl App {
             println!("Token: {token:?}");
         }
         self.had_error = false;
+
+        let mut parser: Parser = Parser::new(tokens.to_vec());
+        let expr = parser.parse();
+        println!("{:?}", print(&expr));
+
     }
 }
 

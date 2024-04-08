@@ -1,4 +1,4 @@
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TokenType {
     // SC Tokens
     LeftParen, RightParen, LeftBrace, RightBrace, 
