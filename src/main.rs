@@ -8,7 +8,9 @@ mod scanner;
 mod tokentype;
 mod token;
 mod parser;
+mod interpreter;
 
+use crate::interpreter::Interpreter;
 use crate::token::Token;
 use crate::parser::Parser;
 use crate::parser::print;
@@ -66,7 +68,10 @@ impl App {
 
         let mut parser: Parser = Parser::new(tokens.to_vec());
         let expr = parser.parse();
-        println!("{:?}", print(&expr));
+        println!("Parser Print: {:?}", print(&expr));
+
+        let interpreter: Interpreter = Interpreter::new();
+        interpreter.interpret(&expr);
 
     }
 }

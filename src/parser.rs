@@ -68,7 +68,7 @@ impl Parser {
 
         while self.match_one_of(&[&TokenType::Slash, &TokenType::Star]) {
             let operator: Token = self.previous();
-            let right: Expr = self.factor();
+            let right: Expr = self.unary();
             expr = Expr::Binary { left: Box::new(expr), operator, right: Box::new(right) }
         }
         expr
@@ -76,14 +76,16 @@ impl Parser {
 
     // unary -> (! | -) unary
     fn unary(&mut self) -> Expr {
-        let mut expr: Expr = self.primary();
         if self.match_one_of(&[&TokenType::Bang, &TokenType::Minus]) {
             let operator: Token = self.previous();
             let right: Expr = self.unary();
-            expr = Expr::Unary { operator, right: Box::new(right) }
+            let expr = Expr::Unary { operator, right: Box::new(right) };
+            return expr;
         }
 
-        expr
+        self.primary()
+        
+        
     }
 
     // primary -> NUMBER | STRING | true | false | nil | "(" expression ")"
