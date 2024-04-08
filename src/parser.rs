@@ -250,21 +250,27 @@ pub fn print(expr: &Expr) -> String {
     } 
 }
 
-#[test]
-fn main() {
-    let expression = Expr::Binary{
-        left: Box::new(Expr::Unary{
-            operator: Token { tokentype: TokenType::Minus, lexeme: String::from("-"), literal: TokenLiteral::Nil, line: 0},
-            right: Box::new(Expr::Literal{
-                value: TokenLiteral::Number{value: 123.0}
-            }
-)        }),
-        operator: Token { tokentype: TokenType::Star, lexeme: String::from("*"), literal: TokenLiteral::Nil, line: 0},
-        right: Box::new(Expr::Grouping { 
-            expression: Box::new(Expr::Literal { 
-                value: TokenLiteral::Number{value: 45.67} 
-            } 
-)        })
-    };
-    println!("{:?}",print(&expression));
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expression_creation() {
+        let expression = Expr::Binary{
+                left: Box::new(Expr::Unary{
+                    operator: Token { tokentype: TokenType::Minus, lexeme: String::from("-"), literal: TokenLiteral::Nil, line: 0},
+                    right: Box::new(Expr::Literal{
+                        value: TokenLiteral::Number{value: 123.0}
+                    }
+        )        }),
+                operator: Token { tokentype: TokenType::Star, lexeme: String::from("*"), literal: TokenLiteral::Nil, line: 0},
+                right: Box::new(Expr::Grouping { 
+                    expression: Box::new(Expr::Literal { 
+                        value: TokenLiteral::Number{value: 45.67} 
+                    })        
+            })
+        };
+        assert_eq!(print(&expression), String::from("(* (- 123) (group 45.67))"));
+    }
 }
+

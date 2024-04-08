@@ -71,7 +71,7 @@ impl App {
         println!("Parser Print: {:?}", print(&expr));
 
         let interpreter: Interpreter = Interpreter::new();
-        interpreter.interpret(&expr);
+        let _ = interpreter.interpret(&expr);
 
     }
 }

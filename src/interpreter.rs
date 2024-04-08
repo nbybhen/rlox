@@ -2,7 +2,7 @@
 
 use crate::{parser::Expr, token::TokenLiteral, tokentype::TokenType};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Object {
     String(String),
     Number(f32),
@@ -19,11 +19,8 @@ impl Interpreter {
         Interpreter{}
     }
 
-    pub fn interpret(&self, expr: &Expr) {
-        match self.evaluate(expr) {
-            Ok(res) => println!("Output: {res:?}"),
-            Err(msg) => eprintln!("Error: {msg}")
-        }
+    pub fn interpret(&self, expr: &Expr) -> Result<Object, String> {
+        self.evaluate(expr)
     }
 
     pub fn evaluate(&self, expr: &Expr) -> Result<Object, String>  {
@@ -127,7 +124,6 @@ impl Interpreter {
                 }
 
             }
-            _ => Err("smth".to_string())
         }
     }
 
@@ -152,6 +148,27 @@ impl Interpreter {
             Object::Nil => false,
             _ => true
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::token::Token;
+
+    use super::*;
+
+    #[test]
+    fn addition() {
+        let interpreter = Interpreter::new();
+        let expression = Expr::Binary { left: Box::new(Expr::Literal { value: TokenLiteral::Number { value: 10.0 } }),
+            operator: Token{
+                tokentype: TokenType::Plus, 
+                lexeme: "+".to_string(), 
+                literal: TokenLiteral::Nil,
+                line: 0}, 
+            right: Box::new(Expr::Literal { value: TokenLiteral::Number { value: 10.0 } }) };
+        assert_eq!(interpreter.interpret(&expression).expect(""), Object::Number(20.0));
     }
 }
 
