@@ -151,8 +151,7 @@ impl Parser {
                 | TokenType::For
                 | TokenType::While 
                 | TokenType::Print
-                | TokenType::Return
-                | TokenType::Print => return,
+                | TokenType::Return => return,
                 _ => {}
             }
 

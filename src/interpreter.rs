@@ -1,6 +1,7 @@
 // Interpreter
 
 use crate::{parser::Expr, token::TokenLiteral, tokentype::TokenType};
+use rand::Rng;
 
 #[derive(Debug, PartialEq)]
 pub enum Object {
@@ -161,13 +162,68 @@ mod tests {
     #[test]
     fn addition() {
         let interpreter = Interpreter::new();
-        let expression = Expr::Binary { left: Box::new(Expr::Literal { value: TokenLiteral::Number { value: 10.0 } }),
+        for _ in 0..10 {
+            let left: f32 = rand::thread_rng().gen_range(0.0..100.0);
+            let right: f32 = rand::thread_rng().gen_range(0.0..100.0);
+
+            let expression = Expr::Binary { left: Box::new(Expr::Literal { value: TokenLiteral::Number { value: left } }),
+                operator: Token{
+                    tokentype: TokenType::Plus,
+                    lexeme: "+".to_string(),
+                    literal: TokenLiteral::Nil,
+                    line: 0},
+                right: Box::new(Expr::Literal { value: TokenLiteral::Number { value: right } }) };
+            assert_eq!(interpreter.interpret(&expression).expect(""), Object::Number(left+right));
+        }
+    }
+
+    #[test]
+    fn subtraction() {
+        let interpreter = Interpreter::new();
+        for _ in 0..10 {
+            let left: f32 = rand::thread_rng().gen_range(0.0..100.0);
+            let right: f32 = rand::thread_rng().gen_range(0.0..100.0);
+
+            let expression = Expr::Binary { left: Box::new(Expr::Literal { value: TokenLiteral::Number { value: left } }),
+                operator: Token{
+                    tokentype: TokenType::Minus,
+                    lexeme: "-".to_string(),
+                    literal: TokenLiteral::Nil,
+                    line: 0},
+                right: Box::new(Expr::Literal { value: TokenLiteral::Number { value: right } }) };
+            assert_eq!(interpreter.interpret(&expression).expect(""), Object::Number(left-right));
+        }
+
+    }
+
+    #[test]
+    fn multiplication() {
+        let interpreter = Interpreter::new();
+        for _ in 0..10 {
+            let left: f32 = rand::thread_rng().gen_range(0.0..100.0);
+            let right: f32 = rand::thread_rng().gen_range(0.0..100.0);
+
+            let expression = Expr::Binary { left: Box::new(Expr::Literal { value: TokenLiteral::Number { value: left } }),
+                operator: Token{
+                    tokentype: TokenType::Star,
+                    lexeme: "*".to_string(),
+                    literal: TokenLiteral::Nil,
+                    line: 0},
+                right: Box::new(Expr::Literal { value: TokenLiteral::Number { value: right } }) };
+            assert_eq!(interpreter.interpret(&expression).expect(""), Object::Number(left*right));
+        }
+    }
+
+    #[test]
+    fn division() {
+        let interpreter = Interpreter::new();
+        let expression = Expr::Binary { left: Box::new(Expr::Literal { value: TokenLiteral::Number { value: 100.0 } }),
             operator: Token{
-                tokentype: TokenType::Plus, 
-                lexeme: "+".to_string(), 
+                tokentype: TokenType::Slash,
+                lexeme: "/".to_string(),
                 literal: TokenLiteral::Nil,
-                line: 0}, 
-            right: Box::new(Expr::Literal { value: TokenLiteral::Number { value: 10.0 } }) };
+                line: 0},
+            right: Box::new(Expr::Literal { value: TokenLiteral::Number { value: 5.0 } }) };
         assert_eq!(interpreter.interpret(&expression).expect(""), Object::Number(20.0));
     }
 }
