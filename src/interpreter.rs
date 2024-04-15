@@ -1,9 +1,8 @@
 // Interpreter
+use crate::{parser::{Expr, Stmt}, token::{TokenLiteral, Token}, tokentype::TokenType};
+use std::collections::HashMap;
 
-use crate::{parser::Expr, token::TokenLiteral, tokentype::TokenType};
-use rand::Rng;
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     String(String),
     Number(f32),
@@ -11,20 +10,80 @@ pub enum Object {
     Nil
 }
 
+pub struct Environment {
+    values: HashMap<String, Object>
+}
+
+impl Environment {
+    pub fn new() -> Environment {
+        Environment { values: HashMap::new() }
+    }
+
+    // Writes a variable into the global environment
+    fn define(&mut self, name: String, value: Object) -> () {
+        //println!("Value being inserted : {value:?}");
+        self.values.insert(name, value);
+        //println!("Current environment: {:?}", self.values);
+
+    }
+
+    // Gets a variable from the global environment
+    fn get(&mut self, name: Token) -> Object {
+        if self.values.contains_key(&name.lexeme) {
+            return self.values.get(&name.lexeme).unwrap().clone();
+        }
+        Object::Nil
+    }
+
+    // Reassigns a variable within the global environment if it exists 
+    fn assign(&mut self, name: &Token, value: &Object) -> Result<(), String>{
+        if self.values.contains_key(&name.lexeme) {
+            self.values.insert(name.lexeme.clone(), value.clone());
+            return Ok(());
+        }
+        Err("Undefined variable.".to_string())
+    }
+}
+
 pub struct Interpreter {
-    //
+    environment: Environment
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter{}
+        Interpreter{ environment: Environment::new() }
     }
 
-    pub fn interpret(&self, expr: &Expr) -> Result<Object, String> {
-        self.evaluate(expr)
+    pub fn interpret(&mut self, statements: &Vec<Stmt>) -> () {
+        for stmt in statements {
+            //println!("Stmt: {stmt:?}");
+            self.decide(stmt);
+        }
     }
 
-    pub fn evaluate(&self, expr: &Expr) -> Result<Object, String>  {
+    fn decide(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Print(e) => {
+                let val = self.evaluate(e);
+                println!("Printed: {val:?}");
+            },
+            Stmt::Expression(e) => {
+                let _ = self.evaluate(e);
+            },
+            Stmt::Var(n, v) => {
+                if let Some(expr) = v {
+                    let value = self.evaluate(expr);
+                    self.environment.define(n.lexeme.clone(), value.unwrap());
+                }
+                else {
+                    self.environment.define(n.lexeme.clone(), Object::Nil);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, String>  {
         match expr {
             Expr::Literal { value } => match value {
                 TokenLiteral::String { value } => Ok(Object::String(value.to_string())),
@@ -91,7 +150,7 @@ impl Interpreter {
                         match self.check_numbers(&left, &right) {
                             Ok((l,r)) => Ok(Object::Bool(l>=r)),
                             Err(msg) => Err(msg)
-                        }
+                    }
                     },
                     TokenType::Less => {
                         match self.check_numbers(&left, &right) {
@@ -109,6 +168,7 @@ impl Interpreter {
                         match (left, right) {
                             (Object::Number(l), Object::Number(r)) => Ok(Object::Bool(l == r)),
                             (Object::String(l), Object::String(r)) => Ok(Object::Bool(l == r)),
+              
                             (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(l == r)),
                             _ => Err("Can't check equality between different types".to_string())
                         }
@@ -123,10 +183,18 @@ impl Interpreter {
                     }
                     _ => Err("Not a valid binary operation".to_string())
                 }
-
+            },
+            Expr::Variable { name } => Ok(self.environment.get(name.clone())),
+            Expr::Assign { name, expr } => {
+                let value: Object = self.evaluate(expr)?;
+                self.environment.assign(name, &value);
+                Ok(value)
             }
+            _ => {Err("Not possible".to_string())}
         }
     }
+
+    
 
     // Returns the numerical value from within Object enum
     fn check_number(&self, num: &Object) -> Result<f32, String> {
@@ -151,81 +219,5 @@ impl Interpreter {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-
-    use crate::token::Token;
-
-    use super::*;
-
-    #[test]
-    fn addition() {
-        let interpreter = Interpreter::new();
-        for _ in 0..10 {
-            let left: f32 = rand::thread_rng().gen_range(0.0..100.0);
-            let right: f32 = rand::thread_rng().gen_range(0.0..100.0);
-
-            let expression = Expr::Binary { left: Box::new(Expr::Literal { value: TokenLiteral::Number { value: left } }),
-                operator: Token{
-                    tokentype: TokenType::Plus,
-                    lexeme: "+".to_string(),
-                    literal: TokenLiteral::Nil,
-                    line: 0},
-                right: Box::new(Expr::Literal { value: TokenLiteral::Number { value: right } }) };
-            assert_eq!(interpreter.interpret(&expression).expect(""), Object::Number(left+right));
-        }
-    }
-
-    #[test]
-    fn subtraction() {
-        let interpreter = Interpreter::new();
-        for _ in 0..10 {
-            let left: f32 = rand::thread_rng().gen_range(0.0..100.0);
-            let right: f32 = rand::thread_rng().gen_range(0.0..100.0);
-
-            let expression = Expr::Binary { left: Box::new(Expr::Literal { value: TokenLiteral::Number { value: left } }),
-                operator: Token{
-                    tokentype: TokenType::Minus,
-                    lexeme: "-".to_string(),
-                    literal: TokenLiteral::Nil,
-                    line: 0},
-                right: Box::new(Expr::Literal { value: TokenLiteral::Number { value: right } }) };
-            assert_eq!(interpreter.interpret(&expression).expect(""), Object::Number(left-right));
-        }
-
-    }
-
-    #[test]
-    fn multiplication() {
-        let interpreter = Interpreter::new();
-        for _ in 0..10 {
-            let left: f32 = rand::thread_rng().gen_range(0.0..100.0);
-            let right: f32 = rand::thread_rng().gen_range(0.0..100.0);
-
-            let expression = Expr::Binary { left: Box::new(Expr::Literal { value: TokenLiteral::Number { value: left } }),
-                operator: Token{
-                    tokentype: TokenType::Star,
-                    lexeme: "*".to_string(),
-                    literal: TokenLiteral::Nil,
-                    line: 0},
-                right: Box::new(Expr::Literal { value: TokenLiteral::Number { value: right } }) };
-            assert_eq!(interpreter.interpret(&expression).expect(""), Object::Number(left*right));
-        }
-    }
-
-    #[test]
-    fn division() {
-        let interpreter = Interpreter::new();
-        let expression = Expr::Binary { left: Box::new(Expr::Literal { value: TokenLiteral::Number { value: 100.0 } }),
-            operator: Token{
-                tokentype: TokenType::Slash,
-                lexeme: "/".to_string(),
-                literal: TokenLiteral::Nil,
-                line: 0},
-            right: Box::new(Expr::Literal { value: TokenLiteral::Number { value: 5.0 } }) };
-        assert_eq!(interpreter.interpret(&expression).expect(""), Object::Number(20.0));
-    }
-}
-
+  
 

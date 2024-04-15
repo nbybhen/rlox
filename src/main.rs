@@ -3,6 +3,7 @@ use std::process;
 
 use std::io;
 use std::io::Write;
+use std::fs;
 
 mod scanner;
 mod tokentype;
@@ -12,8 +13,7 @@ mod interpreter;
 
 use crate::interpreter::Interpreter;
 use crate::token::Token;
-use crate::parser::Parser;
-use crate::parser::print;
+use crate::parser::{Parser, Stmt};
 
 struct App {
     had_error: bool
@@ -34,7 +34,16 @@ impl App {
     }
 
     // Reads code from file
-    fn run_file(&self, path: &String) {
+    fn run_file(&mut self, path: &String) {
+        match fs::read_to_string(path) {
+            Ok(stuff) => {
+                self.run(stuff);
+            },
+            _ => {
+                eprintln!("Could not read file.");
+            }
+        }
+
         if self.had_error {
             process::exit(1);
         }
@@ -61,17 +70,17 @@ impl App {
         let mut scanner = scanner::Scanner::build(inp);
         let tokens: &Vec<Token> = scanner.scan_tokens();
 
-        for token in tokens {
-            println!("Token: {token:?}");
-        }
+        //for token in tokens {
+            //println!("Token: {token:?}");
+        //}
         self.had_error = false;
 
         let mut parser: Parser = Parser::new(tokens.to_vec());
-        let expr = parser.parse();
-        println!("Parser Print: {:?}", print(&expr));
+        let statements: Vec<Stmt> = parser.parse();
+        //println!("Parser Print: {:?}", print(&expr));
 
-        let interpreter: Interpreter = Interpreter::new();
-        let _ = interpreter.interpret(&expr);
+        let mut interpreter: Interpreter = Interpreter::new();
+        let _ = interpreter.interpret(&statements);
 
     }
 }

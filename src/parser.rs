@@ -1,5 +1,52 @@
+use crate::interpreter::Object;
 use crate::token::{Token, TokenLiteral};
 use crate::tokentype::TokenType;
+
+#[derive(Debug)]
+pub enum Stmt {
+    Expression(Expr),
+    Print(Expr),
+    Var(Token, Option<Expr>)
+}
+
+#[derive(Debug)]
+pub enum Expr {
+    Literal {
+        value: TokenLiteral
+    },
+    Grouping {
+        expression: Box<Expr>
+    },
+    Unary{
+        operator: Token,
+        right: Box<Expr>
+    },
+    Binary{
+        left: Box<Expr>,
+        operator: Token,
+        right: Box<Expr>
+    },
+    Variable {
+        name: Token
+    },
+    Assign {
+        name: Token,
+        expr: Box<Expr>
+    }
+}
+
+impl std::fmt::Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Expr::Literal { value } => write!(f, "{value}"),
+            Expr::Grouping { expression } => write!(f, "{:}", print(expression)),
+            Expr::Unary { operator, right } => write!(f, "{operator} {:}", print(right)),
+            Expr::Binary { left, operator, right } => write!(f, "{operator} {:} {:} ", print(left), print(right)),
+            Expr::Variable { name } => write!(f, "{name}"),
+            Expr::Assign { name, expr } => write!(f, "{name} = {expr:?}")
+        }
+    }
+}
 
 pub struct Parser {
     pub tokens: Vec<Token>,
@@ -15,15 +62,80 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Expr {
-        let x = self.expression();
-        println!("Parse result: {:?}", x);
-        x
+    // program -> declaration* EOF ;
+    pub fn parse(&mut self) -> Vec<Stmt> {
+        let mut statements: Vec<Stmt> = Vec::new();
+        while !self.is_at_end() {
+            statements.push(self.declaration());
+        }
+        statements
     }
 
-    // expression -> equality
+    // declaration -> varStmt | statement 
+    fn declaration(&mut self) -> Stmt {
+        if self.match_one_of(&[&TokenType::Var]) {
+            return self.var_declaration();
+        }
+        self.statement()
+    }
+
+    // varDecl -> "var" IDENTIFIER ( "=" expression )? ";"
+    fn var_declaration(&mut self) -> Stmt {
+        let name: Token = self.consume(TokenType::Identifier, "Expect variable name.").expect("Whoops");
+
+        let mut initializer: Option<Expr> = None;
+        if self.match_one_of(&[&TokenType::Equal]) {
+            initializer = Some(self.expression());
+        }
+
+        self.consume(TokenType::Semicolon, "Expected a semi-colon").expect("Whoops");
+        Stmt::Var(name, initializer)
+    }
+
+    // statement -> exprStmt | printStmt ;
+    fn statement(&mut self) -> Stmt {
+        if self.match_one_of(&[&TokenType::Print]) {
+            return self.print_statement();
+        }
+
+        self.expression_statement()
+    }
+
+    // printStmt -> "print" expression ";"
+    fn print_statement(&mut self) -> Stmt {
+        let val: Expr = self.expression();
+        let _ = self.consume(TokenType::Semicolon, "Expected \';\' after statement.").expect("Whoops");
+        Stmt::Print(val)
+    }
+
+    // exprStmt -> expression ";"
+    fn expression_statement(&mut self) -> Stmt {
+        let val: Expr = self.expression();
+        let _ = self.consume(TokenType::Semicolon, "Expected \';\' after statement.").expect("Whoops");
+        Stmt::Expression(val)
+    }
+
+    // expression -> assignment ;
     fn expression(&mut self) -> Expr {
-        self.equality()
+        self.assignment()
+    }
+
+    // assignment -> IDENTIFIER "=" assignment | equality ;
+    fn assignment(&mut self) -> Expr {
+        let expr: Expr = self.equality();
+        if self.match_one_of(&[&TokenType::Equal]) {
+            let _equals: Token = self.previous();
+            let value:Expr =  self.assignment();
+
+            match expr {
+                Expr::Variable { name } => {
+                    return Expr::Assign { name, expr: Box::new(value) };
+                },
+                _ => {panic!("Invalid assignment target.")}
+            }
+        }
+
+        expr
     }
 
     // equality -> comparison ((!= | ==) comparison)*
@@ -84,8 +196,6 @@ impl Parser {
         }
 
         self.primary()
-        
-        
     }
 
     // primary -> NUMBER | STRING | true | false | nil | "(" expression ")"
@@ -110,6 +220,10 @@ impl Parser {
             return Expr::Grouping { expression: Box::new(expr) };
         }
 
+        if self.match_one_of(&[&TokenType::Identifier]) {
+            return Expr::Variable {name: self.previous() };
+        }
+
         Expr::Literal { value: TokenLiteral::Nil }
     }
 
@@ -129,10 +243,9 @@ impl Parser {
         false
     }
 
-    fn consume(&mut self, tokentype: TokenType, message: &'static str) -> Result<(), &'static str> {
+    fn consume(&mut self, tokentype: TokenType, message: &'static str) -> Result<Token, &'static str> {
         if self.check(&tokentype) {
-            self.advance();
-            return Ok(());
+            return Ok(self.advance());
         }
         Err(message)
     }
@@ -160,8 +273,11 @@ impl Parser {
     }
 
     // You should know what this does by now...
-    fn advance(&mut self) {
-        self.current += 1;
+    fn advance(&mut self) -> Token {
+        if !self.is_at_end() {
+            self.current += 1;
+        }
+        self.previous()
     }
 
     // Checks if the current token equals the given token type
@@ -186,35 +302,7 @@ impl Parser {
     }
 }
 
-#[derive(Debug)]
-pub enum Expr {
-    Literal {
-        value: TokenLiteral
-    },
-    Grouping {
-        expression: Box<Expr>
-    },
-    Unary{
-        operator: Token,
-        right: Box<Expr>
-    },
-    Binary{
-        left: Box<Expr>,
-        operator: Token,
-        right: Box<Expr>
-    }
-}
 
-impl std::fmt::Display for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Expr::Literal { value } => write!(f, "{value}"),
-            Expr::Grouping { expression } => write!(f, "{:}", print(expression)),
-            Expr::Unary { operator, right } => write!(f, "{operator} {:}", print(right)),
-            Expr::Binary { left, operator, right } => write!(f, "{operator} {:} {:} ", print(left), print(right))
-        }
-    }
-}
 
 fn parenthesize(name: String, exprs: &[&Box<Expr>]) -> String {
     let mut builder: String = String::from("(");
@@ -245,7 +333,8 @@ pub fn print(expr: &Expr) -> String {
         },
         Expr::Binary{left, operator, right} => {
             parenthesize(operator.lexeme.clone(), &[left, right])
-        }
+        },
+        _ => String::new()
     } 
 }
 
