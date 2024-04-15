@@ -10,13 +10,15 @@ pub enum Object {
     Nil
 }
 
+#[derive(Debug, Clone)]
 pub struct Environment {
-    values: HashMap<String, Object>
+    values: HashMap<String, Object>,
+    enclosing: Option<Box<Environment>>
 }
 
 impl Environment {
-    pub fn new() -> Environment {
-        Environment { values: HashMap::new() }
+    pub fn new(env: Option<Box<Environment>>) -> Environment {
+        Environment { values: HashMap::new(), enclosing: env}
     }
 
     // Writes a variable into the global environment
@@ -32,6 +34,9 @@ impl Environment {
         if self.values.contains_key(&name.lexeme) {
             return self.values.get(&name.lexeme).unwrap().clone();
         }
+        if let Some(_) = &self.enclosing {
+            return self.enclosing.as_mut().expect("Enclosing was wrong type").get(name);
+        }
         Object::Nil
     }
 
@@ -40,6 +45,9 @@ impl Environment {
         if self.values.contains_key(&name.lexeme) {
             self.values.insert(name.lexeme.clone(), value.clone());
             return Ok(());
+        }
+        if let Some(_) = &self.enclosing {
+            return self.enclosing.as_mut().expect("Enclosing was wrong type").assign(name, value);
         }
         Err("Undefined variable.".to_string())
     }
@@ -51,7 +59,7 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter{ environment: Environment::new() }
+        Interpreter{ environment: Environment::new(None) }
     }
 
     pub fn interpret(&mut self, statements: &Vec<Stmt>) -> () {
@@ -61,7 +69,7 @@ impl Interpreter {
         }
     }
 
-    fn decide(&mut self, stmt: &Stmt) {
+    fn decide(&mut self, stmt: &Stmt) -> () {
         match stmt {
             Stmt::Print(e) => {
                 let val = self.evaluate(e);
@@ -78,9 +86,21 @@ impl Interpreter {
                 else {
                     self.environment.define(n.lexeme.clone(), Object::Nil);
                 }
+            },
+            Stmt::Block(stmts) => {
+                self.execute_block(stmts, Environment::new(Some(Box::new(self.environment.clone()))));
             }
-            _ => {}
         }
+    }
+
+    fn execute_block(&mut self, stmts: &Vec<Stmt>, env: Environment) {
+        let prev_env: Environment = self.environment.clone();
+        self.environment = env;
+
+        for stmt in stmts {
+            self.decide(&stmt);
+        }
+        self.environment = prev_env;
     }
 
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, String>  {
@@ -190,7 +210,6 @@ impl Interpreter {
                 self.environment.assign(name, &value);
                 Ok(value)
             }
-            _ => {Err("Not possible".to_string())}
         }
     }
 

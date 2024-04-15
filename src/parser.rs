@@ -1,4 +1,3 @@
-use crate::interpreter::Object;
 use crate::token::{Token, TokenLiteral};
 use crate::tokentype::TokenType;
 
@@ -6,7 +5,8 @@ use crate::tokentype::TokenType;
 pub enum Stmt {
     Expression(Expr),
     Print(Expr),
-    Var(Token, Option<Expr>)
+    Var(Token, Option<Expr>),
+    Block(Vec<Stmt>)
 }
 
 #[derive(Debug)]
@@ -92,13 +92,29 @@ impl Parser {
         Stmt::Var(name, initializer)
     }
 
-    // statement -> exprStmt | printStmt ;
+    // statement -> exprStmt | printStmt | blockStmt ;
     fn statement(&mut self) -> Stmt {
         if self.match_one_of(&[&TokenType::Print]) {
             return self.print_statement();
         }
 
+        if self.match_one_of(&[&TokenType::LeftBrace]) {
+            return Stmt::Block(self.block_statement());
+        }
+
         self.expression_statement()
+    }
+
+    // block -> "{" declaration "}" ;
+    fn block_statement(&mut self) -> Vec<Stmt> {
+        let mut statements: Vec<Stmt> = vec!();
+
+        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+            statements.push(self.declaration());
+        }
+
+        self.consume(TokenType::RightBrace, "Expected \'}\' after block").expect("Error");
+        statements
     }
 
     // printStmt -> "print" expression ";"
