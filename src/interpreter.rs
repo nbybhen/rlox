@@ -89,7 +89,16 @@ impl Interpreter {
             },
             Stmt::Block(stmts) => {
                 self.execute_block(stmts, Environment::new(Some(Box::new(self.environment.clone()))));
-            }
+            },
+            Stmt::If(condition, then, el) => {
+                let res = self.evaluate(condition).expect("Uh oh");
+                if self.is_truthy(res) {
+                    self.decide(then);
+                }
+                else if let Some(v) = el {
+                    self.decide(&v);
+                }
+            } 
         }
     }
 
@@ -209,6 +218,22 @@ impl Interpreter {
                 let value: Object = self.evaluate(expr)?;
                 self.environment.assign(name, &value);
                 Ok(value)
+            },
+            Expr::Logical { left, operator, right } => {
+                let l = self.evaluate(left)?;
+
+                if operator.tokentype == TokenType::Or {
+                    if self.is_truthy(l) {
+                        return Ok(l);
+                    }
+                }
+                else {
+                    if !self.is_truthy(l) {
+                        return Ok(l);
+                    }
+                }
+
+                self.evaluate(right)
             }
         }
     }
@@ -230,7 +255,7 @@ impl Interpreter {
     }
 
     // Returns whether an object is considered "truthy" or not
-    fn is_truthy(&self, object: Object) -> bool {
+    fn is_truthy(&mut self, object: Object) -> bool {
         match object {
             Object::Bool(x) => x,
             Object::Nil => false,

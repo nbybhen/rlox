@@ -1,15 +1,16 @@
 use crate::token::{Token, TokenLiteral};
 use crate::tokentype::TokenType;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Expression(Expr),
     Print(Expr),
     Var(Token, Option<Expr>),
-    Block(Vec<Stmt>)
+    Block(Vec<Stmt>),
+    If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Literal {
         value: TokenLiteral
@@ -26,13 +27,19 @@ pub enum Expr {
         operator: Token,
         right: Box<Expr>
     },
+    Logical {
+        left: Box<Expr>,
+        operator: Token,
+        right: Box<Expr>
+    },
     Variable {
         name: Token
     },
     Assign {
         name: Token,
         expr: Box<Expr>
-    }
+    },
+    
 }
 
 impl std::fmt::Display for Expr {
@@ -43,7 +50,7 @@ impl std::fmt::Display for Expr {
             Expr::Unary { operator, right } => write!(f, "{operator} {:}", print(right)),
             Expr::Binary { left, operator, right } => write!(f, "{operator} {:} {:} ", print(left), print(right)),
             Expr::Variable { name } => write!(f, "{name}"),
-            Expr::Assign { name, expr } => write!(f, "{name} = {expr:?}")
+            Expr::Assign { name, expr } => write!(f, "{name} = {expr:?}"),
         }
     }
 }
@@ -92,7 +99,7 @@ impl Parser {
         Stmt::Var(name, initializer)
     }
 
-    // statement -> exprStmt | printStmt | blockStmt ;
+    // statement -> exprStmt | printStmt | blockStmt | ifStmt ;
     fn statement(&mut self) -> Stmt {
         if self.match_one_of(&[&TokenType::Print]) {
             return self.print_statement();
@@ -102,7 +109,24 @@ impl Parser {
             return Stmt::Block(self.block_statement());
         }
 
+        if self.match_one_of(&[&TokenType::If]) {
+            return self.if_statement();
+        }
+
         self.expression_statement()
+    }
+
+    // ifStmt -> "if" "(" expression ")" statement ( "else" statement)? ;
+    fn if_statement(&mut self) -> Stmt{
+        let _ = self.consume(TokenType::LeftParen, "Expected \'(\' after if");
+        let condition: Expr = self.expression();
+        let _ = self.consume(TokenType::RightParen, "Expected \')\' after if condition");
+
+        let then_branch: Stmt = self.statement();
+        let else_branch = if self.match_one_of(&[&TokenType::Else]) {Some(Box::new(self.statement()))} else {None};
+
+
+        Stmt::If(Box::new(condition), Box::new(then_branch), else_branch)
     }
 
     // block -> "{" declaration "}" ;
@@ -136,9 +160,9 @@ impl Parser {
         self.assignment()
     }
 
-    // assignment -> IDENTIFIER "=" assignment | equality ;
+    // assignment -> IDENTIFIER "=" assignment | logic_or;
     fn assignment(&mut self) -> Expr {
-        let expr: Expr = self.equality();
+        let expr: Expr = self.or();
         if self.match_one_of(&[&TokenType::Equal]) {
             let _equals: Token = self.previous();
             let value:Expr =  self.assignment();
@@ -149,6 +173,32 @@ impl Parser {
                 },
                 _ => {panic!("Invalid assignment target.")}
             }
+        }
+
+        expr
+    }
+
+    // logic_or -> logic_and ( "or" logic_and )* ;
+    fn or(&mut self) -> Expr {
+        let mut expr: Expr = self.and();
+
+        while self.match_one_of(&[&TokenType::Or]) {
+            let operator: Token = self.previous();
+            let right: Expr = self.and();
+            expr = Expr::Logical { left: Box::new(expr), operator, right: Box::new(right)}
+        }
+
+        expr
+    }
+
+    // logic_and -> equality ( "and" equality )* ;
+    fn and(&mut self) -> Expr {
+        let mut expr: Expr = self.equality();
+
+        while self.match_one_of(&[&TokenType::And]) {
+            let operator: Token = self.previous();
+            let right: Expr = self.equality();
+            expr = Expr::Logical { left: Box::new(expr), operator, right: Box::new(right) }
         }
 
         expr
