@@ -85,7 +85,7 @@ impl<'a> Scanner<'a> {
 
     fn scan_token(&mut self) -> () {
         let c = self.advance();
-        println!("c value: {c}");
+        //println!("c value: {c}");
 
         match c {
             '(' => self.add_token(TokenType::LeftParen),

@@ -7,7 +7,8 @@ pub enum Stmt {
     Print(Expr),
     Var(Token, Option<Expr>),
     Block(Vec<Stmt>),
-    If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>)
+    If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),
+    While(Box<Expr>, Box<Stmt>)
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +52,7 @@ impl std::fmt::Display for Expr {
             Expr::Binary { left, operator, right } => write!(f, "{operator} {:} {:} ", print(left), print(right)),
             Expr::Variable { name } => write!(f, "{name}"),
             Expr::Assign { name, expr } => write!(f, "{name} = {expr:?}"),
+            Expr::Logical { left, operator, right } => write!(f, "{left} {operator} {right}")
         }
     }
 }
@@ -99,7 +101,7 @@ impl Parser {
         Stmt::Var(name, initializer)
     }
 
-    // statement -> exprStmt | printStmt | blockStmt | ifStmt ;
+    // statement -> exprStmt | printStmt | blockStmt | ifStmt | whileStmt ;
     fn statement(&mut self) -> Stmt {
         if self.match_one_of(&[&TokenType::Print]) {
             return self.print_statement();
@@ -113,7 +115,57 @@ impl Parser {
             return self.if_statement();
         }
 
+        if self.match_one_of(&[&TokenType::While]) {
+            return self.while_statement();
+        }
+
+        if self.match_one_of(&[&TokenType::For]) {
+            return self.for_statement();
+        }
+
         self.expression_statement()
+    }
+
+    fn for_statement(&mut self) -> Stmt {
+        let _ = self.consume(TokenType::LeftParen, "Expected \'(\' after while.");
+
+        let initializer: Option<Stmt> = if self.match_one_of(&[&TokenType::Semicolon]) {None}
+            else if self.match_one_of(&[&TokenType::Var]) {Some(self.var_declaration())} else {Some(self.expression_statement())};
+        let condition: Option<Expr> = if self.check(&TokenType::Semicolon) {None} else {Some(self.expression())};
+        let _ = self.consume(TokenType::Semicolon, "Expected \';\' after for condition.");
+
+        let increment: Option<Expr> = if self.check(&TokenType::RightParen) {None} else {Some(self.expression())};
+        let _ = self.consume(TokenType::RightParen, "Expected \')\' after while condition.");
+
+        let mut inner: Stmt = self.statement();
+
+        if increment.is_some() {
+            inner = Stmt::Block(vec!(inner, Stmt::Expression(increment.unwrap())));
+        }
+
+        if condition.is_some() {
+            inner = Stmt::While(Box::new(condition.unwrap()), Box::new(inner));
+        }
+        else {
+            inner = Stmt::While(Box::new(Expr::Literal { value: TokenLiteral::Bool { value: true } }), Box::new(inner));
+        }
+
+        if initializer.is_some() {
+            inner = Stmt::Block(vec!(initializer.unwrap(), inner));
+        }
+
+        inner
+    }
+
+    // whileStmt -> "while" "(" expression ")" statement ;
+    fn while_statement(&mut self) -> Stmt {
+        let _ = self.consume(TokenType::LeftParen, "Expected \'(\' after while.");
+        let condition: Expr = self.expression();
+        let _ = self.consume(TokenType::RightParen, "Expected \')\' after while condition.");
+
+        let inner: Stmt = self.statement();
+        Stmt::While(Box::new(condition), Box::new(inner))
+        
     }
 
     // ifStmt -> "if" "(" expression ")" statement ( "else" statement)? ;

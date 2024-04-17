@@ -34,9 +34,10 @@ impl Environment {
         if self.values.contains_key(&name.lexeme) {
             return self.values.get(&name.lexeme).unwrap().clone();
         }
-        if let Some(_) = &self.enclosing {
+        if self.enclosing.is_some() {
             return self.enclosing.as_mut().expect("Enclosing was wrong type").get(name);
         }
+        
         Object::Nil
     }
 
@@ -46,9 +47,10 @@ impl Environment {
             self.values.insert(name.lexeme.clone(), value.clone());
             return Ok(());
         }
-        if let Some(_) = &self.enclosing {
+        if self.enclosing.is_some(){
             return self.enclosing.as_mut().expect("Enclosing was wrong type").assign(name, value);
         }
+        
         Err("Undefined variable.".to_string())
     }
 }
@@ -88,28 +90,34 @@ impl Interpreter {
                 }
             },
             Stmt::Block(stmts) => {
+                //println!("Pre-block Env: {:?}", self.environment);
                 self.execute_block(stmts, Environment::new(Some(Box::new(self.environment.clone()))));
             },
             Stmt::If(condition, then, el) => {
-                let res = self.evaluate(condition).expect("Uh oh");
-                if self.is_truthy(res) {
+                let res = self.evaluate(condition).expect("Couldn't read if condition.");
+                if is_truthy(&res) {
                     self.decide(then);
                 }
                 else if let Some(v) = el {
                     self.decide(&v);
                 }
-            } 
+            },
+            Stmt::While(condition, inner) => {
+                while is_truthy(&self.evaluate(condition).unwrap()) {
+                    self.decide(inner);
+                }
+            }
         }
     }
 
     fn execute_block(&mut self, stmts: &Vec<Stmt>, env: Environment) {
-        let prev_env: Environment = self.environment.clone();
-        self.environment = env;
+        let _ = std::mem::replace(&mut self.environment, env);
 
         for stmt in stmts {
             self.decide(&stmt);
         }
-        self.environment = prev_env;
+
+        self.environment = *self.environment.enclosing.clone().unwrap();
     }
 
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, String>  {
@@ -133,7 +141,7 @@ impl Interpreter {
                             Err("Not a number".to_string())
                         }
                     },
-                    TokenType::Bang => Ok(Object::Bool(!self.is_truthy(right))),
+                    TokenType::Bang => Ok(Object::Bool(!is_truthy(&right))),
                     _ => Err("Not a valid unary operator.".to_string())
                 }
             },
@@ -216,20 +224,22 @@ impl Interpreter {
             Expr::Variable { name } => Ok(self.environment.get(name.clone())),
             Expr::Assign { name, expr } => {
                 let value: Object = self.evaluate(expr)?;
-                self.environment.assign(name, &value);
+                let _ = self.environment.assign(name, &value);
                 Ok(value)
             },
             Expr::Logical { left, operator, right } => {
-                let l = self.evaluate(left)?;
+                let left = self.evaluate(left);
 
-                if operator.tokentype == TokenType::Or {
-                    if self.is_truthy(l) {
-                        return Ok(l);
-                    }
-                }
-                else {
-                    if !self.is_truthy(l) {
-                        return Ok(l);
+                match operator.tokentype {
+                    TokenType::Or => {
+                        if is_truthy(&left.clone()?) {
+                            return left;
+                        }
+                    },
+                    _ => {
+                        if !is_truthy(&left.clone()?) {
+                            return left;
+                        }
                     }
                 }
 
@@ -254,14 +264,16 @@ impl Interpreter {
         }
     }
 
-    // Returns whether an object is considered "truthy" or not
-    fn is_truthy(&mut self, object: Object) -> bool {
-        match object {
+    
+}
+
+// Returns whether an object is considered "truthy" or not
+    fn is_truthy(object: &Object) -> bool {
+        match *object {
             Object::Bool(x) => x,
             Object::Nil => false,
             _ => true
         }
     }
-}
   
 
