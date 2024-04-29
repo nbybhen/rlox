@@ -66,7 +66,7 @@ impl App {
 
     // Runs the code inputted by the REPL
     fn run(&mut self, inp: String) {
-        println!("Running: {inp}");
+        //println!("Running: {inp}");
         let mut scanner = scanner::Scanner::build(inp);
         let tokens: &Vec<Token> = scanner.scan_tokens();
 
