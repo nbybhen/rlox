@@ -100,7 +100,7 @@ impl<'a> Scanner<'a> {
             '*' => self.add_token(TokenType::Star),
             '!' => if self.match_char('=') {self.add_token(TokenType::BangEqual)} else {self.add_token(TokenType::Bang)},
             '=' => if self.match_char('=') {self.add_token(TokenType::EqualEqual)} else {self.add_token(TokenType::Equal)},
-            '<' => if self.match_char('=') {self.add_token(TokenType::LessEqual)} else {self.add_token(TokenType::EqualEqual)},
+            '<' => if self.match_char('=') {self.add_token(TokenType::LessEqual)} else {self.add_token(TokenType::Less)},
             '>' => if self.match_char('=') {self.add_token(TokenType::GreaterEqual)} else {self.add_token(TokenType::Greater)},
             // Different due to possibility of comment (e.g. //info) OR division operation
             '/' => {

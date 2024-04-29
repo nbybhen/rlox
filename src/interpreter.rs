@@ -74,8 +74,9 @@ impl Interpreter {
     fn decide(&mut self, stmt: &Stmt) -> () {
         match stmt {
             Stmt::Print(e) => {
-                let val = self.evaluate(e);
-                println!("Printed: {val:?}");
+                if let Ok(val) = self.evaluate(e) {
+                    println!("{val:?}");
+                };
             },
             Stmt::Expression(e) => {
                 let _ = self.evaluate(e);
