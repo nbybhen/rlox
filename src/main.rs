@@ -20,12 +20,16 @@ use crate::tokentype::TokenType;
 
 pub struct App {
     had_error: Cell<bool>,
-    had_runtime_error: Cell<bool>
+    had_runtime_error: Cell<bool>,
 }
 
 impl App {
     fn new() -> App {
-        App {had_error: Cell::new(false), had_runtime_error: Cell::new(false)}
+
+        App {
+            had_error: Cell::new(false),
+            had_runtime_error: Cell::new(false),
+        }
     }
 
     pub fn error(&self, line: u32, message: &str) {
@@ -54,35 +58,31 @@ impl App {
     }
 
     // Reads code from file
-    fn run_file(&mut self, path: &String) {
+    fn run_file(&self, interpreter: &mut Interpreter, path: &String) {
         match fs::read_to_string(path) {
-            Ok(data) => {
-                self.run(data);
-            },
-            _ => {
-                eprintln!("Could not read file.");
-            }
+            Ok(data) => self.run(data, interpreter),
+            _ => eprintln!("Could not read file.")
         }
     }
 
     // REPL
-    fn run_prompt(&mut self) {
+    fn run_prompt(&self, interpreter: &mut Interpreter) {
         loop {
             print!("> ");
             io::stdout().flush().unwrap();
             let mut input = String::new();
             io::stdin().read_line(&mut input).expect("Invalid input.");
+
             if input.is_empty() {
                 break;
             }
-            self.run(input);
-
+            self.run(input, interpreter);
+            self.had_error.set(false);
         }
     }
 
     // Runs the code inputted by the REPL
-    fn run(&self, inp: String) {
-        //println!("Running: {inp}");
+    fn run(&self, inp: String, interpreter: &mut Interpreter) {
         let mut scanner = Scanner::build(self, inp);
         let tokens: Vec<Token> = scanner.scan_tokens();
 
@@ -97,7 +97,6 @@ impl App {
             return;
         }
 
-        let mut interpreter: Interpreter = Interpreter::new();
         let _ = interpreter.interpret(&statements, self);
 
         if self.had_runtime_error.get() {
@@ -110,13 +109,14 @@ impl App {
 
 
 fn main() {
-    let mut app: App = App::new();
+    let app: App = App::new();
+    let mut interpreter = Interpreter::new();
     let args: Vec<String> = env::args().collect();
     match args.len() {
         // jlox
-        1 => app.run_prompt(),
+        1 => app.run_prompt(&mut interpreter),
         // jlox [script]
-        2 => app.run_file(&args[1]),
+        2 => app.run_file(&mut interpreter, &args[1]),
         // error
         _ => {
             println!("Improper syntax: Use \"rlox [script]\"");
