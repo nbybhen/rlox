@@ -124,9 +124,9 @@ impl Interpreter {
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, String>  {
         match expr {
             Expr::Literal { value } => match value {
-                TokenLiteral::String { value } => Ok(Object::String(value.to_string())),
-                TokenLiteral::Number { value } => Ok(Object::Number(*value)),
-                TokenLiteral::Bool { value } => Ok(Object::Bool(*value)),
+                TokenLiteral::String ( value ) => Ok(Object::String(value.to_string())),
+                TokenLiteral::Number ( value ) => Ok(Object::Number(*value)),
+                TokenLiteral::Bool ( value ) => Ok(Object::Bool(*value)),
                 TokenLiteral::Nil => Ok(Object::Nil)
             },
             Expr::Grouping { expression } => self.evaluate(expression),
@@ -246,10 +246,12 @@ impl Interpreter {
 
                 self.evaluate(right)
             }
+            Expr::Call {callee, paren, arguments} => {
+                let callee: Object = self.evaluate(callee).unwrap();
+                Ok(callee)
+            }
         }
     }
-
-    
 
     // Returns the numerical value from within Object enum
     fn check_number(&self, num: &Object) -> Result<f32, String> {

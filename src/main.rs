@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::env;
 use std::process;
 
@@ -14,23 +15,24 @@ mod interpreter;
 use crate::interpreter::Interpreter;
 use crate::token::Token;
 use crate::parser::{Parser, Stmt};
+use crate::scanner::Scanner;
 
-struct App {
-    had_error: bool
+pub struct App {
+    had_error: Cell<bool>
 }
 
 impl App {
     fn new() -> App {
-        App {had_error: false}
+        App {had_error: Cell::new(false)}
     }
 
-    fn error(&mut self, line: u32, message: String) {
-        self.report(line, String::new() ,message);
+    pub fn error(&self, line: u32, message: &str) {
+        self.report(line, String::new(), message);
     }
 
-    fn report(&mut self, line: u32, loc: String, message: String) {
+    fn report(&self, line: u32, loc: String, message: &str) {
         eprintln!("[line {line}] Error{loc}: {message}");
-        self.had_error = true;
+        //self.had_error = true;
     }
 
     // Reads code from file
@@ -44,7 +46,7 @@ impl App {
             }
         }
 
-        if self.had_error {
+        if self.had_error.get() {
             process::exit(1);
         }
     }
@@ -65,18 +67,13 @@ impl App {
     }
 
     // Runs the code inputted by the REPL
-    fn run(&mut self, inp: String) {
+    fn run(&self, inp: String) {
         //println!("Running: {inp}");
-        let mut scanner = scanner::Scanner::build(inp);
-        let tokens: &Vec<Token> = scanner.scan_tokens();
-
-        //for token in tokens {
-            //println!("Token: {token:?}");
-        //}
-        self.had_error = false;
+        let mut scanner = Scanner::build(self, inp);
+        let tokens: Vec<Token> = scanner.scan_tokens();
 
         let mut parser: Parser = Parser::new(tokens.to_vec());
-        let statements: Vec<Stmt> = parser.parse();
+        let statements: Vec<Stmt> = parser.parse().expect("Unable to parse: ");
         //println!("Parser Print: {:?}", print(&expr));
 
         let mut interpreter: Interpreter = Interpreter::new();

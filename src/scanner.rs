@@ -1,6 +1,7 @@
 use crate::token::{Token, TokenLiteral};
 use crate::tokentype::TokenType;
 use std::collections::HashMap;
+use crate::App;
 
 
 pub struct Scanner<'a> {
@@ -9,11 +10,12 @@ pub struct Scanner<'a> {
     start: usize,
     current: usize,
     line: u32,
-    keywords: HashMap<&'a str, TokenType>
+    keywords: HashMap<&'a str, TokenType>,
+    app: &'a App
 }
 
 impl<'a> Scanner<'a> {
-    pub fn build(inp: String) -> Scanner<'a> {
+    pub fn build(app: &'a App, inp: String) -> Scanner<'a> {
         let mut keywords: HashMap<&str, TokenType> = HashMap::new();
         keywords.insert("and", TokenType::And);
         keywords.insert("class", TokenType::Class);
@@ -38,7 +40,8 @@ impl<'a> Scanner<'a> {
             start: 0, 
             current: 0, 
             line: 1,
-            keywords
+            keywords,
+            app
         }
     }
 
@@ -61,7 +64,7 @@ impl<'a> Scanner<'a> {
         self.tokens.push(Token {
             tokentype: ty,
             lexeme: text.to_string(),
-            literal: TokenLiteral::String{value: text.to_string()},
+            literal: TokenLiteral::String(text.to_string()),
             line: self.line
         });
     }
@@ -71,7 +74,7 @@ impl<'a> Scanner<'a> {
         self.tokens.push(Token {
             tokentype: ty,
             lexeme: value.to_string(),
-            literal: TokenLiteral::Number{value},
+            literal: TokenLiteral::Number(value),
             line: self.line
         });
     }
@@ -122,6 +125,9 @@ impl<'a> Scanner<'a> {
                 }
                 else if c.is_alphabetic() {
                     self.identifier();
+                }
+                else {
+                    self.app.error(self.line, "Unexpected character.");
                 }
             }       
         }
@@ -174,13 +180,15 @@ impl<'a> Scanner<'a> {
         }
 
         if self.is_at_end() {
-            eprintln!("Unterminated string!");
+            self.app.error(self.line, "Unterminated string.");
+            return;
             std::process::exit(1);
         }
 
         // Eats the closing " mark
         self.advance();
 
+        // Removes the surrounding ""
         let value: &str = &self.source[self.start + 1..self.current - 1].to_string();
         self.add_string_token(TokenType::String, value);
     }
@@ -206,7 +214,7 @@ impl<'a> Scanner<'a> {
         true 
     }
 
-    pub fn scan_tokens(&mut self) -> &Vec<Token>{
+    pub fn scan_tokens(&mut self) -> Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_token();
@@ -218,6 +226,6 @@ impl<'a> Scanner<'a> {
             literal: TokenLiteral::Nil,
             line: self.line});
 
-        &self.tokens
+        self.tokens.clone()
     }
 }
