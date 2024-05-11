@@ -1,5 +1,5 @@
 var a = 0;
 var b = 0;
-print "Hello World!;
+print "Hello World!";
 print "Hi!";
 print "Yo!";

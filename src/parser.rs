@@ -1,3 +1,4 @@
+use crate::App;
 use crate::token::{Token, TokenLiteral};
 use crate::tokentype::TokenType;
 
@@ -62,30 +63,34 @@ impl std::fmt::Display for Expr {
     }
 }
 
-pub struct Parser {
+pub struct Parser<'a> {
     pub tokens: Vec<Token>,
+    app: &'a App,
     current: usize
 }
 
-impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Parser {
+impl<'a> Parser<'a> {
+    pub fn new(tokens: Vec<Token>, app: &'a App) -> Parser {
         Parser {
             tokens,
+            app,
             current: 0
         }
     }
 
     // program -> declaration* EOF ;
-    pub fn parse(&mut self) -> Result<Vec<Stmt>, &'static str> {
+    pub fn parse(&mut self) -> Vec<Stmt> {
         let mut statements: Vec<Stmt> = Vec::new();
         while !self.is_at_end() {
-            statements.push(self.declaration()?);
+            if let Some(stmt) = self.declaration() {
+                statements.push(stmt);
+            }
         }
-        Ok(statements)
+        statements
     }
 
     // declaration -> varStmt | statement 
-    fn declaration(&mut self) -> Result<Stmt, &'static str> {
+    fn declaration(&mut self) -> Option<Stmt> {
         if self.match_one_of(&[&TokenType::Var]) {
             return self.var_declaration();
         }
@@ -93,26 +98,26 @@ impl Parser {
     }
 
     // varDecl -> "var" IDENTIFIER ( "=" expression )? ";"
-    fn var_declaration(&mut self) -> Result<Stmt, &'static str> {
-        let name: Token = self.consume(TokenType::Identifier, "Expect variable name.")?;
+    fn var_declaration(&mut self) -> Option<Stmt> {
+        let name: Token = self.consume(TokenType::Identifier, "Expect variable name.").ok()?;
 
         let mut initializer: Option<Expr> = None;
         if self.match_one_of(&[&TokenType::Equal]) {
-            initializer = Some(self.expression());
+            initializer = Some(self.expression()?);
         }
 
-        self.consume(TokenType::Semicolon, "Expected a semi-colon")?;
-        Ok(Stmt::Var(name, initializer))
+        self.consume(TokenType::Semicolon, "Expected a semi-colon").ok();
+        Some(Stmt::Var(name, initializer))
     }
 
     // statement -> exprStmt | printStmt | blockStmt | ifStmt | whileStmt ;
-    fn statement(&mut self) -> Result<Stmt, &'static str> {
+    fn statement(&mut self) -> Option<Stmt> {
         if self.match_one_of(&[&TokenType::Print]) {
             return self.print_statement();
         }
 
         if self.match_one_of(&[&TokenType::LeftBrace]) {
-            return Ok(Stmt::Block(self.block_statement()?));
+            return Some(Stmt::Block(self.block_statement()?));
         }
 
         if self.match_one_of(&[&TokenType::If]) {
@@ -130,15 +135,15 @@ impl Parser {
         self.expression_statement()
     }
 
-    fn for_statement(&mut self) -> Result<Stmt, &'static str> {
+    fn for_statement(&mut self) -> Option<Stmt> {
         let _ = self.consume(TokenType::LeftParen, "Expected \'(\' after while.");
 
         let initializer: Option<Stmt> = if self.match_one_of(&[&TokenType::Semicolon]) {None}
             else if self.match_one_of(&[&TokenType::Var]) {Some(self.var_declaration()?)} else {Some(self.expression_statement()?)};
-        let condition: Option<Expr> = if self.check(&TokenType::Semicolon) {None} else {Some(self.expression())};
+        let condition: Option<Expr> = if self.check(&TokenType::Semicolon) {None} else {Some(self.expression()?)};
         let _ = self.consume(TokenType::Semicolon, "Expected \';\' after for condition.");
 
-        let increment: Option<Expr> = if self.check(&TokenType::RightParen) {None} else {Some(self.expression())};
+        let increment: Option<Expr> = if self.check(&TokenType::RightParen) {None} else {Some(self.expression()?)};
         let _ = self.consume(TokenType::RightParen, "Expected \')\' after while condition.");
 
         let mut inner: Stmt = self.statement()?;
@@ -158,35 +163,35 @@ impl Parser {
             inner = Stmt::Block(vec!(initializer.unwrap(), inner));
         }
 
-        Ok(inner)
+        Some(inner)
     }
 
     // whileStmt -> "while" "(" expression ")" statement ;
-    fn while_statement(&mut self) -> Result<Stmt, &'static str> {
+    fn while_statement(&mut self) -> Option<Stmt> {
         let _ = self.consume(TokenType::LeftParen, "Expected \'(\' after while.");
-        let condition: Expr = self.expression();
+        let condition: Expr = self.expression()?;
         let _ = self.consume(TokenType::RightParen, "Expected \')\' after while condition.");
 
         let inner: Stmt = self.statement()?;
-        Ok(Stmt::While(Box::new(condition), Box::new(inner)))
+        Some(Stmt::While(Box::new(condition), Box::new(inner)))
         
     }
 
     // ifStmt -> "if" "(" expression ")" statement ( "else" statement)? ;
-    fn if_statement(&mut self) -> Result<Stmt, &'static str> {
+    fn if_statement(&mut self) -> Option<Stmt> {
         let _ = self.consume(TokenType::LeftParen, "Expected \'(\' after if");
-        let condition: Expr = self.expression();
+        let condition: Expr = self.expression()?;
         let _ = self.consume(TokenType::RightParen, "Expected \')\' after if condition");
 
         let then_branch: Stmt = self.statement()?;
         let else_branch: Option<Box<Stmt>> = if self.match_one_of(&[&TokenType::Else]) {Some(Box::new(self.statement()?))} else {None};
 
 
-        Ok(Stmt::If(Box::new(condition), Box::new(then_branch), else_branch))
+        Some(Stmt::If(Box::new(condition), Box::new(then_branch), else_branch))
     }
 
     // block -> "{" declaration "}" ;
-    fn block_statement(&mut self) -> Result<Vec<Stmt>, &'static str> {
+    fn block_statement(&mut self) -> Option<Vec<Stmt>> {
         let mut statements: Vec<Stmt> = vec!();
 
         while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
@@ -194,134 +199,134 @@ impl Parser {
         }
 
         self.consume(TokenType::RightBrace, "Expected \'}\' after block").expect("Error");
-        Ok(statements)
+        Some(statements)
     }
 
     // printStmt -> "print" expression ";"
-    fn print_statement(&mut self) -> Result<Stmt, &'static str> {
-        let val: Expr = self.expression();
+    fn print_statement(&mut self) -> Option<Stmt> {
+        let val: Expr = self.expression()?;
         let _ = self.consume(TokenType::Semicolon, "Expected \';\' after statement.");
-        Ok(Stmt::Print(val))
+        Some(Stmt::Print(val))
     }
 
     // exprStmt -> expression ";"
-    fn expression_statement(&mut self) -> Result<Stmt, &'static str> {
-        let val: Expr = self.expression();
+    fn expression_statement(&mut self) -> Option<Stmt> {
+        let val: Expr = self.expression()?;
         let _ = self.consume(TokenType::Semicolon, "Expected \';\' after statement.");
-        Ok(Stmt::Expression(val))
+        Some(Stmt::Expression(val))
     }
 
     // expression -> assignment ;
-    fn expression(&mut self) -> Expr {
+    fn expression(&mut self) -> Option<Expr> {
         self.assignment()
     }
 
     // assignment -> IDENTIFIER "=" assignment | logic_or;
-    fn assignment(&mut self) -> Expr {
-        let expr: Expr = self.or();
+    fn assignment(&mut self) -> Option<Expr> {
+        let expr: Expr = self.or()?;
         if self.match_one_of(&[&TokenType::Equal]) {
             let _equals: Token = self.previous();
-            let value:Expr =  self.assignment();
+            let value: Expr =  self.assignment()?;
 
             match expr {
                 Expr::Variable { name } => {
-                    return Expr::Assign { name, expr: Box::new(value) };
+                    return Some(Expr::Assign { name, expr: Box::new(value) });
                 },
                 _ => {panic!("Invalid assignment target.")}
             }
         }
 
-        expr
+        Some(expr)
     }
 
     // logic_or -> logic_and ( "or" logic_and )* ;
-    fn or(&mut self) -> Expr {
-        let mut expr: Expr = self.and();
+    fn or(&mut self) -> Option<Expr> {
+        let mut expr: Expr = self.and()?;
 
         while self.match_one_of(&[&TokenType::Or]) {
             let operator: Token = self.previous();
-            let right: Expr = self.and();
+            let right: Expr = self.and()?;
             expr = Expr::Logical { left: Box::new(expr), operator, right: Box::new(right)}
         }
 
-        expr
+        Some(expr)
     }
 
     // logic_and -> equality ( "and" equality )* ;
-    fn and(&mut self) -> Expr {
-        let mut expr: Expr = self.equality();
+    fn and(&mut self) -> Option<Expr> {
+        let mut expr: Expr = self.equality()?;
 
         while self.match_one_of(&[&TokenType::And]) {
             let operator: Token = self.previous();
-            let right: Expr = self.equality();
+            let right: Expr = self.equality()?;
             expr = Expr::Logical { left: Box::new(expr), operator, right: Box::new(right) }
         }
 
-        expr
+        Some(expr)
     }
 
     // equality -> comparison ((!= | ==) comparison)*
-    fn equality(&mut self) -> Expr {
-        let mut expr: Expr = self.comparison();
+    fn equality(&mut self) -> Option<Expr> {
+        let mut expr: Expr = self.comparison()?;
 
         while self.match_one_of(&[&TokenType::BangEqual, &TokenType::EqualEqual]) {
             let operator: Token = self.previous();
-            let right: Expr = self.comparison();
+            let right: Expr = self.comparison()?;
             expr = Expr::Binary { left: Box::new(expr), operator, right: Box::new(right)}
         }
-        expr
+        Some(expr)
     }
 
     // comparison -> term ((> | < | >= |<=) term)*
-    fn comparison(&mut self) -> Expr {
-        let mut expr: Expr = self.term();
+    fn comparison(&mut self) -> Option<Expr> {
+        let mut expr: Expr = self.term()?;
 
         while self.match_one_of(&[&TokenType::Greater, &TokenType::LessEqual, &TokenType::GreaterEqual, &TokenType::Less]) {
             let operator: Token = self.previous();
-            let right: Expr = self.term();
+            let right: Expr = self.term()?;
             expr = Expr::Binary { left: Box::new(expr), operator, right: Box::new(right) }
         }
-        expr
+        Some(expr)
     }
 
     // term -> factor ((- | +) factor)*
-    fn term(&mut self) -> Expr {
-        let mut expr = self.factor();
+    fn term(&mut self) -> Option<Expr> {
+        let mut expr: Option<Expr> = self.factor();
 
         while self.match_one_of(&[&TokenType::Minus, &TokenType::Plus]) {
             let operator: Token = self.previous();
-            let right: Expr = self.factor();
-            expr = Expr::Binary { left: Box::new(expr), operator, right: Box::new(right) }
+            let right: Expr = self.factor()?;
+            expr = Some(Expr::Binary { left: Box::new(expr?), operator, right: Box::new(right) })
         }
         expr
     }
 
     // factor -> unary ((/ | *) unary)*
-    fn factor(&mut self) -> Expr {
-        let mut expr: Expr = self.unary();
+    fn factor(&mut self) -> Option<Expr> {
+        let mut expr: Expr = self.unary()?;
 
         while self.match_one_of(&[&TokenType::Slash, &TokenType::Star]) {
             let operator: Token = self.previous();
-            let right: Expr = self.unary();
+            let right: Expr = self.unary()?;
             expr = Expr::Binary { left: Box::new(expr), operator, right: Box::new(right) }
         }
-        expr
+        Some(expr)
     }
 
     // unary -> (! | -) unary | call ;
-    fn unary(&mut self) -> Expr {
+    fn unary(&mut self) -> Option<Expr> {
         if self.match_one_of(&[&TokenType::Bang, &TokenType::Minus]) {
             let operator: Token = self.previous();
-            let right: Expr = self.unary();
+            let right: Expr = self.unary()?;
             let expr = Expr::Unary { operator, right: Box::new(right) };
-            return expr;
+            return Some(expr);
         }
 
         self.call()
     }
     // call -> primary ( "(" arguments? ")" )* ;
-    fn call(&mut self) -> Expr {
-        let mut expr: Expr = self.primary();
+    fn call(&mut self) -> Option<Expr> {
+        let mut expr: Expr = self.primary()?;
         loop {
             if self.match_one_of(&[&TokenType::LeftParen]) {
                 self.peek();
@@ -332,36 +337,38 @@ impl Parser {
             }
         }
 
-        expr
+        Some(expr)
     }
 
     // primary -> NUMBER | STRING | true | false | nil | "(" expression ")"
-    fn primary(&mut self) -> Expr {
+    fn primary(&mut self) -> Option<Expr> {
         if self.match_one_of(&[&TokenType::False]) {
-            return Expr::Literal { value: TokenLiteral::Bool(false)};
+            return Some(Expr::Literal { value: TokenLiteral::Bool(false)});
         }
         if self.match_one_of(&[&TokenType::True]) {
-            return Expr::Literal { value: TokenLiteral::Bool(true) };
+            return Some(Expr::Literal { value: TokenLiteral::Bool(true) });
         }
         if self.match_one_of(&[&TokenType::Nil]) {
-            return Expr::Literal { value: TokenLiteral::Nil }
+            return Some(Expr::Literal { value: TokenLiteral::Nil });
         }
 
         if self.match_one_of(&[&TokenType::Number, &TokenType::String]) {
-            return Expr::Literal { value: self.previous().literal }
+            return Some(Expr::Literal { value: self.previous().literal });
         }
 
         if self.match_one_of(&[&TokenType::LeftParen]) {
             let expr = self.expression();
-            self.consume(TokenType::RightParen, "Expected ')' after expression.").expect("Parser Error");
-            return Expr::Grouping { expression: Box::new(expr) };
+            let _ = self.consume(TokenType::RightParen, "Expected ')' after expression.");
+            return Some(Expr::Grouping { expression: Box::new(expr?) });
         }
 
         if self.match_one_of(&[&TokenType::Identifier]) {
-            return Expr::Variable {name: self.previous() };
+            return Some(Expr::Variable {name: self.previous() });
         }
 
-        Expr::Literal { value: TokenLiteral::Nil }
+        self.app.error_token(self.peek(), "Expected expression.");
+
+        None
     }
 
 
@@ -381,14 +388,15 @@ impl Parser {
     }
 
     // Collects function call + arguments
-    fn finish_call(&mut self, callee: Expr) -> Result<Expr, &'static str> {
+    fn finish_call(&mut self, callee: Expr) -> Option<Expr> {
         let mut arguments: Vec<Expr> = Vec::new();
         if !self.check(&TokenType::RightParen) {
             loop {
                 if arguments.len() > 255 {
-                    return Err("Can't have more than 255 arguments");
+                    self.app.error_token(self.peek(), "Can't have more that 255 arguments");
+                    return None;
                 }
-                arguments.push(self.expression());
+                arguments.push(self.expression()?);
                 if self.match_one_of(&[&TokenType::Comma]) {
                     break;
                 }
@@ -397,7 +405,7 @@ impl Parser {
 
         let paren: Token = self.consume(TokenType::RightParen, "Expect \')\' after arguments.").unwrap();
 
-        Ok(Expr::Call {callee: Box::new(callee), paren, arguments})
+        Some(Expr::Call {callee: Box::new(callee), paren, arguments})
     }
 
     fn consume(&mut self, tokentype: TokenType, message: &'static str) -> Result<Token, &'static str> {

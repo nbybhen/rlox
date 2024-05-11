@@ -16,6 +16,7 @@ use crate::interpreter::Interpreter;
 use crate::token::Token;
 use crate::parser::{Parser, Stmt};
 use crate::scanner::Scanner;
+use crate::tokentype::TokenType;
 
 pub struct App {
     had_error: Cell<bool>
@@ -30,6 +31,19 @@ impl App {
         self.report(line, String::new(), message);
     }
 
+    // Handles errors where the Token is displayed within the message
+    pub fn error_token(&self, token: Token, message: &str) {
+        if token.tokentype == TokenType::EOF {
+            self.report(token.line, String::from(" at end"), message);
+        }
+        else {
+            self.report(token.line, format!("at '{:}'", token.lexeme), message);
+        }
+    }
+
+
+
+    // Reports errors to the user without panicking
     fn report(&self, line: u32, loc: String, message: &str) {
         eprintln!("[line {line}] Error{loc}: {message}");
         //self.had_error = true;
@@ -72,13 +86,15 @@ impl App {
         let mut scanner = Scanner::build(self, inp);
         let tokens: Vec<Token> = scanner.scan_tokens();
 
-        let mut parser: Parser = Parser::new(tokens.to_vec());
-        let statements: Vec<Stmt> = parser.parse().expect("Unable to parse: ");
-        //println!("Parser Print: {:?}", print(&expr));
+        let mut parser: Parser = Parser::new(tokens.to_vec(), self);
+        let statements: Vec<Stmt> = parser.parse();
+
+        if self.had_error.get() {
+            return;
+        }
 
         let mut interpreter: Interpreter = Interpreter::new();
         let _ = interpreter.interpret(&statements);
-
     }
 }
 
