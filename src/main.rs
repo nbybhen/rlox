@@ -19,12 +19,13 @@ use crate::scanner::Scanner;
 use crate::tokentype::TokenType;
 
 pub struct App {
-    had_error: Cell<bool>
+    had_error: Cell<bool>,
+    had_runtime_error: Cell<bool>
 }
 
 impl App {
     fn new() -> App {
-        App {had_error: Cell::new(false)}
+        App {had_error: Cell::new(false), had_runtime_error: Cell::new(false)}
     }
 
     pub fn error(&self, line: u32, message: &str) {
@@ -41,7 +42,10 @@ impl App {
         }
     }
 
-
+    // Reports runtime errors
+    pub fn runtime_error(&self, token: Token, message: &str) {
+        eprintln!("[line {}] {}", token.line, message);
+    }
 
     // Reports errors to the user without panicking
     fn report(&self, line: u32, loc: String, message: &str) {
@@ -52,8 +56,8 @@ impl App {
     // Reads code from file
     fn run_file(&mut self, path: &String) {
         match fs::read_to_string(path) {
-            Ok(stuff) => {
-                self.run(stuff);
+            Ok(data) => {
+                self.run(data);
             },
             _ => {
                 eprintln!("Could not read file.");
@@ -61,6 +65,10 @@ impl App {
         }
 
         if self.had_error.get() {
+            process::exit(1);
+        }
+
+        if self.had_runtime_error.get() {
             process::exit(1);
         }
     }
@@ -94,7 +102,7 @@ impl App {
         }
 
         let mut interpreter: Interpreter = Interpreter::new();
-        let _ = interpreter.interpret(&statements);
+        let _ = interpreter.interpret(&statements, self);
     }
 }
 

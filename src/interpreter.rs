@@ -1,5 +1,5 @@
 // Interpreter
-use crate::{parser::{Expr, Stmt}, token::{TokenLiteral, Token}, tokentype::TokenType};
+use crate::{App, parser::{Expr, Stmt}, token::{TokenLiteral, Token}, tokentype::TokenType};
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -64,22 +64,27 @@ impl Interpreter {
         Interpreter{ environment: Environment::new(None) }
     }
 
-    pub fn interpret(&mut self, statements: &Vec<Stmt>) -> () {
+    pub fn interpret(&mut self, statements: &Vec<Stmt>, app: &App) -> Result<(), (Token, &'static str)> {
         for stmt in statements {
             //println!("Stmt: {stmt:?}");
-            self.decide(stmt);
+            match self.decide(stmt) {
+                Ok(_) => {},
+                Err((token, msg)) => {
+                    app.runtime_error(token, msg);
+                    break;
+                }
+            }
         }
+        Ok(())
     }
 
-    fn decide(&mut self, stmt: &Stmt) -> () {
+    fn decide(&mut self, stmt: &Stmt) -> Result<(), (Token, &'static str)> {
         match stmt {
             Stmt::Print(e) => {
-                if let Ok(val) = self.evaluate(e) {
-                    println!("{val:?}");
-                };
+                println!("{:?}",self.evaluate(e)?);
             },
             Stmt::Expression(e) => {
-                let _ = self.evaluate(e);
+                let _ = self.evaluate(e)?;
             },
             Stmt::Var(n, v) => {
                 if let Some(expr) = v {
@@ -97,18 +102,19 @@ impl Interpreter {
             Stmt::If(condition, then, el) => {
                 let res = self.evaluate(condition).expect("Couldn't read if condition.");
                 if is_truthy(&res) {
-                    self.decide(then);
+                    self.decide(then)?;
                 }
                 else if let Some(v) = el {
-                    self.decide(&v);
+                    self.decide(&v)?;
                 }
             },
             Stmt::While(condition, inner) => {
                 while is_truthy(&self.evaluate(condition).unwrap()) {
-                    self.decide(inner);
+                    self.decide(inner)?;
                 }
             }
         }
+        Ok(())
     }
 
     fn execute_block(&mut self, stmts: &Vec<Stmt>, env: Environment) {
@@ -121,7 +127,7 @@ impl Interpreter {
         self.environment = *self.environment.enclosing.clone().unwrap();
     }
 
-    pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, String>  {
+    pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, (Token, &'static str)>  {
         match expr {
             Expr::Literal { value } => match value {
                 TokenLiteral::String ( value ) => Ok(Object::String(value.to_string())),
@@ -139,16 +145,17 @@ impl Interpreter {
                             Ok(Object::Number(-i))
                         }
                         else {
-                            Err("Not a number".to_string())
+                            Err((operator.clone(), "Not a number"))
                         }
                     },
                     TokenType::Bang => Ok(Object::Bool(!is_truthy(&right))),
-                    _ => Err("Not a valid unary operator.".to_string())
+                    _ => Err((operator.clone(), "Not a valid unary operator."))
                 }
             },
             Expr::Binary { left, operator, right } => {
                 let left = self.evaluate(left)?;
                 let right = self.evaluate(right)?;
+                //println!("Left: {left:?}\nRight: {right:?}");
 
                 match operator.tokentype {
                     TokenType::Minus => {
@@ -156,50 +163,50 @@ impl Interpreter {
                             Ok(Object::Number(l - r))
                         }
                         else {
-                            Err("Not a valid unary operator.".to_string())
+                            Err((operator.clone(), "Not a valid unary operator."))
                         }
                     },
                     TokenType::Slash => {
                         match self.check_numbers(&left, &right) {
                             Ok((l,r)) => Ok(Object::Number(l / r)),
-                            Err(msg) => Err(msg)
+                            Err(msg) => Err((operator.clone(), msg))
                         }
                     },
                     TokenType::Star => {
                         match self.check_numbers(&left, &right) {
                             Ok((l,r)) => Ok(Object::Number(l*r)),
-                            Err(msg) => Err(msg)
+                            Err(msg) => Err((operator.clone(), msg))
                         }
                     },
                     TokenType::Plus => {
                         match (left, right) {
                             (Object::Number(l), Object::Number(r)) => Ok(Object::Number(l + r)),
                             (Object::String(l), Object::String(r)) => Ok(Object::String(format!("{} {}", l, r))),
-                            _ => Err("Plus can only be used on two numbers or two strings".to_string())
+                            _ => Err((operator.clone(), "\'+\' can only be used on two numbers or two strings"))
                         }
                     },
                     TokenType::Greater => {
                         match self.check_numbers(&left, &right) {
                             Ok((l,r)) => Ok(Object::Bool(l > r)),
-                            Err(msg) => Err(msg)
+                            Err(msg) => Err((operator.clone(), msg))
                         }
                     },
                     TokenType::GreaterEqual => {
                         match self.check_numbers(&left, &right) {
                             Ok((l,r)) => Ok(Object::Bool(l>=r)),
-                            Err(msg) => Err(msg)
+                            Err(msg) => Err((operator.clone(), msg))
                     }
                     },
                     TokenType::Less => {
                         match self.check_numbers(&left, &right) {
                             Ok((l,r)) => Ok(Object::Bool(l<r)),
-                            Err(msg) => Err(msg)
+                            Err(msg) => Err((operator.clone(), msg))
                         }
                     },
                     TokenType::LessEqual => {
                         match self.check_numbers(&left, &right) {
                             Ok((l,r)) => Ok(Object::Bool(l<=r)),
-                            Err(msg) => Err(msg)
+                            Err(msg) => Err((operator.clone(), msg))
                         }
                     },
                     TokenType::EqualEqual => {
@@ -208,7 +215,7 @@ impl Interpreter {
                             (Object::String(l), Object::String(r)) => Ok(Object::Bool(l == r)),
               
                             (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(l == r)),
-                            _ => Err("Can't check equality between different types".to_string())
+                            _ => Err((operator.clone(), "Can't check equality between different types"))
                         }
                     },
                     TokenType::BangEqual => {
@@ -216,10 +223,10 @@ impl Interpreter {
                             (Object::Number(l), Object::Number(r)) => Ok(Object::Bool(l != r)),
                             (Object::String(l), Object::String(r)) => Ok(Object::Bool(l != r)),
                             (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(l != r)),
-                            _ => Err("Can't check equality between different types".to_string())
+                            _ => Err((operator.clone(), "Can't check equality between different types"))
                         }
                     }
-                    _ => Err("Not a valid binary operation".to_string())
+                    _ => Err((operator.clone(), "Not a valid binary operation"))
                 }
             },
             Expr::Variable { name } => Ok(self.environment.get(name.clone())),
@@ -254,20 +261,18 @@ impl Interpreter {
     }
 
     // Returns the numerical value from within Object enum
-    fn check_number(&self, num: &Object) -> Result<f32, String> {
+    fn check_number(&self, num: &Object) -> Result<f32, &'static str> {
         match num {
             Object::Number(i) => Ok(*i),
-            _ => Err("Input must be numerical objects".to_string())
+            _ => Err("Input must be numerical objects")
         }
     }
-    fn check_numbers(&self, left: &Object, right: &Object) -> Result<(f32,f32), String> {
+    fn check_numbers(&self, left: &Object, right: &Object) -> Result<(f32,f32), &'static str> {
         match (left, right) {
             (Object::Number(l), Object::Number(r)) => Ok((*l,*r)),
-            _ => Err("Inputs must be numerical objects".to_string())
+            _ => Err("Inputs must be numerical objects")
         }
     }
-
-    
 }
 
 // Returns whether an object is considered "truthy" or not
