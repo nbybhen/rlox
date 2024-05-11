@@ -38,7 +38,7 @@ impl App {
             self.report(token.line, String::from(" at end"), message);
         }
         else {
-            self.report(token.line, format!("at '{:}'", token.lexeme), message);
+            self.report(token.line, format!(" at '{:}'", token.lexeme), message);
         }
     }
 
@@ -50,7 +50,7 @@ impl App {
     // Reports errors to the user without panicking
     fn report(&self, line: u32, loc: String, message: &str) {
         eprintln!("[line {line}] Error{loc}: {message}");
-        //self.had_error = true;
+        self.had_error.set(true);
     }
 
     // Reads code from file
@@ -62,14 +62,6 @@ impl App {
             _ => {
                 eprintln!("Could not read file.");
             }
-        }
-
-        if self.had_error.get() {
-            process::exit(1);
-        }
-
-        if self.had_runtime_error.get() {
-            process::exit(1);
         }
     }
 
@@ -94,6 +86,10 @@ impl App {
         let mut scanner = Scanner::build(self, inp);
         let tokens: Vec<Token> = scanner.scan_tokens();
 
+        if self.had_error.get() {
+            return;
+        }
+
         let mut parser: Parser = Parser::new(tokens.to_vec(), self);
         let statements: Vec<Stmt> = parser.parse();
 
@@ -103,6 +99,10 @@ impl App {
 
         let mut interpreter: Interpreter = Interpreter::new();
         let _ = interpreter.interpret(&statements, self);
+
+        if self.had_runtime_error.get() {
+            process::exit(1);
+        }
     }
 }
 

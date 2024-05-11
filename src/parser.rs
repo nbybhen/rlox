@@ -91,10 +91,18 @@ impl<'a> Parser<'a> {
 
     // declaration -> varStmt | statement 
     fn declaration(&mut self) -> Option<Stmt> {
-        if self.match_one_of(&[&TokenType::Var]) {
-            return self.var_declaration();
+        let declaration= if self.match_one_of(&[&TokenType::Var]) {
+            self.var_declaration()
         }
-        self.statement()
+        else {
+            self.statement()
+        };
+
+        if declaration.is_none() {
+            self.synchronize();
+        }
+
+        declaration
     }
 
     // varDecl -> "var" IDENTIFIER ( "=" expression )? ";"
@@ -225,14 +233,14 @@ impl<'a> Parser<'a> {
     fn assignment(&mut self) -> Option<Expr> {
         let expr: Expr = self.or()?;
         if self.match_one_of(&[&TokenType::Equal]) {
-            let _equals: Token = self.previous();
+            let equals: Token = self.previous();
             let value: Expr =  self.assignment()?;
 
             match expr {
                 Expr::Variable { name } => {
                     return Some(Expr::Assign { name, expr: Box::new(value) });
                 },
-                _ => {panic!("Invalid assignment target.")}
+                _ => self.app.error_token(equals, "Invalid assignment target.")
             }
         }
 
@@ -486,7 +494,7 @@ pub fn print(expr: &Expr) -> String {
     match expr {
         Expr::Literal{value} => {
             match value {
-                TokenLiteral::Nil => "Nil".to_string(),
+                TokenLiteral::Nil => String::from("Nil"),
                 _ => value.to_string()
             }
         },
@@ -494,7 +502,7 @@ pub fn print(expr: &Expr) -> String {
             parenthesize(operator.lexeme.clone(), &[right])
         },
         Expr::Grouping{expression} => {
-            parenthesize("group".to_string(), &[expression])
+            parenthesize(String::from("group"), &[expression])
         },
         Expr::Binary{left, operator, right} => {
             parenthesize(operator.lexeme.clone(), &[left, right])

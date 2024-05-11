@@ -182,7 +182,6 @@ impl<'a> Scanner<'a> {
         if self.is_at_end() {
             self.app.error(self.line, "Unterminated string.");
             return;
-            std::process::exit(1);
         }
 
         // Eats the closing " mark

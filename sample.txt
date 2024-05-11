@@ -1,5 +1,5 @@
 var a = 2;
-a = a + "Hello!";
-var b = 0;
-print "Var a:";
+var c = 3;
 print a;
+print b;
+print c;

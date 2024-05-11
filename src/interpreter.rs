@@ -26,19 +26,18 @@ impl Environment {
         //println!("Value being inserted : {value:?}");
         self.values.insert(name, value);
         //println!("Current environment: {:?}", self.values);
-
     }
 
     // Gets a variable from the global environment
-    fn get(&mut self, name: Token) -> Object {
+    fn get(&mut self, name: Token) -> Result<Object, (Token, String)> {
         if self.values.contains_key(&name.lexeme) {
-            return self.values.get(&name.lexeme).unwrap().clone();
+            return Ok(self.values.get(&name.lexeme).unwrap().clone());
         }
         if self.enclosing.is_some() {
-            return self.enclosing.as_mut().expect("Enclosing was wrong type").get(name);
+            return self.enclosing.as_mut().unwrap().get(name);
         }
-        
-        Object::Nil
+
+        Err((name.clone(), format!("Undefined variable: {name}")))
     }
 
     // Reassigns a variable within the global environment if it exists 
@@ -51,7 +50,7 @@ impl Environment {
             return self.enclosing.as_mut().expect("Enclosing was wrong type").assign(name, value);
         }
         
-        Err("Undefined variable.".to_string())
+        Err(String::from("Undefined variable."))
     }
 }
 
@@ -70,7 +69,7 @@ impl Interpreter {
             match self.decide(stmt) {
                 Ok(_) => {},
                 Err((token, msg)) => {
-                    app.runtime_error(token, msg);
+                    app.runtime_error(token, &msg);
                     break;
                 }
             }
@@ -78,7 +77,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn decide(&mut self, stmt: &Stmt) -> Result<(), (Token, &'static str)> {
+    fn decide(&mut self, stmt: &Stmt) -> Result<(), (Token, String)> {
         match stmt {
             Stmt::Print(e) => {
                 println!("{:?}",self.evaluate(e)?);
@@ -97,7 +96,7 @@ impl Interpreter {
             },
             Stmt::Block(stmts) => {
                 //println!("Pre-block Env: {:?}", self.environment);
-                self.execute_block(stmts, Environment::new(Some(Box::new(self.environment.clone()))));
+                self.execute_block(stmts, Environment::new(Some(Box::new(self.environment.clone()))))?;
             },
             Stmt::If(condition, then, el) => {
                 let res = self.evaluate(condition).expect("Couldn't read if condition.");
@@ -117,20 +116,21 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_block(&mut self, stmts: &Vec<Stmt>, env: Environment) {
+    fn execute_block(&mut self, stmts: &Vec<Stmt>, env: Environment) -> Result<(), (Token, String)> {
         let _ = std::mem::replace(&mut self.environment, env);
 
         for stmt in stmts {
-            self.decide(&stmt);
+            self.decide(&stmt)?;
         }
 
         self.environment = *self.environment.enclosing.clone().unwrap();
+        Ok(())
     }
 
-    pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, (Token, &'static str)>  {
+    pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, (Token, String)>  {
         match expr {
             Expr::Literal { value } => match value {
-                TokenLiteral::String ( value ) => Ok(Object::String(value.to_string())),
+                TokenLiteral::String ( value ) => Ok(Object::String(String::from(value))),
                 TokenLiteral::Number ( value ) => Ok(Object::Number(*value)),
                 TokenLiteral::Bool ( value ) => Ok(Object::Bool(*value)),
                 TokenLiteral::Nil => Ok(Object::Nil)
@@ -145,11 +145,11 @@ impl Interpreter {
                             Ok(Object::Number(-i))
                         }
                         else {
-                            Err((operator.clone(), "Not a number"))
+                            Err((operator.clone(), String::from("Not a number")))
                         }
                     },
                     TokenType::Bang => Ok(Object::Bool(!is_truthy(&right))),
-                    _ => Err((operator.clone(), "Not a valid unary operator."))
+                    _ => Err((operator.clone(), String::from("Not a valid unary operator.")))
                 }
             },
             Expr::Binary { left, operator, right } => {
@@ -163,7 +163,7 @@ impl Interpreter {
                             Ok(Object::Number(l - r))
                         }
                         else {
-                            Err((operator.clone(), "Not a valid unary operator."))
+                            Err((operator.clone(), String::from("Not a valid unary operator.")))
                         }
                     },
                     TokenType::Slash => {
@@ -182,7 +182,7 @@ impl Interpreter {
                         match (left, right) {
                             (Object::Number(l), Object::Number(r)) => Ok(Object::Number(l + r)),
                             (Object::String(l), Object::String(r)) => Ok(Object::String(format!("{} {}", l, r))),
-                            _ => Err((operator.clone(), "\'+\' can only be used on two numbers or two strings"))
+                            _ => Err((operator.clone(), String::from("\'+\' can only be used on two numbers or two strings")))
                         }
                     },
                     TokenType::Greater => {
@@ -215,7 +215,7 @@ impl Interpreter {
                             (Object::String(l), Object::String(r)) => Ok(Object::Bool(l == r)),
               
                             (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(l == r)),
-                            _ => Err((operator.clone(), "Can't check equality between different types"))
+                            _ => Err((operator.clone(), String::from("Can't check equality between different types")))
                         }
                     },
                     TokenType::BangEqual => {
@@ -223,13 +223,13 @@ impl Interpreter {
                             (Object::Number(l), Object::Number(r)) => Ok(Object::Bool(l != r)),
                             (Object::String(l), Object::String(r)) => Ok(Object::Bool(l != r)),
                             (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(l != r)),
-                            _ => Err((operator.clone(), "Can't check equality between different types"))
+                            _ => Err((operator.clone(), String::from("Can't check equality between different types")))
                         }
                     }
-                    _ => Err((operator.clone(), "Not a valid binary operation"))
+                    _ => Err((operator.clone(), String::from("Not a valid binary operation")))
                 }
             },
-            Expr::Variable { name } => Ok(self.environment.get(name.clone())),
+            Expr::Variable { name } => Ok(self.environment.get(name.clone())?),
             Expr::Assign { name, expr } => {
                 let value: Object = self.evaluate(expr)?;
                 let _ = self.environment.assign(name, &value);
@@ -253,24 +253,25 @@ impl Interpreter {
 
                 self.evaluate(right)
             }
-            Expr::Call {callee, paren, arguments} => {
+            Expr::Call {callee, paren: _, arguments: _} => {
                 let callee: Object = self.evaluate(callee).unwrap();
+
                 Ok(callee)
             }
         }
     }
 
     // Returns the numerical value from within Object enum
-    fn check_number(&self, num: &Object) -> Result<f32, &'static str> {
+    fn check_number(&self, num: &Object) -> Result<f32, String> {
         match num {
             Object::Number(i) => Ok(*i),
-            _ => Err("Input must be numerical objects")
+            _ => Err(String::from("Input must be numerical objects"))
         }
     }
-    fn check_numbers(&self, left: &Object, right: &Object) -> Result<(f32,f32), &'static str> {
+    fn check_numbers(&self, left: &Object, right: &Object) -> Result<(f32,f32), String> {
         match (left, right) {
             (Object::Number(l), Object::Number(r)) => Ok((*l,*r)),
-            _ => Err("Inputs must be numerical objects")
+            _ => Err(String::from("Inputs must be numerical objects"))
         }
     }
 }
