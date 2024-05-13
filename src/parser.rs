@@ -1,18 +1,18 @@
 use crate::App;
-use crate::token::{Token, TokenLiteral};
-use crate::tokentype::TokenType;
+use crate::token::{Token, TokenLiteral, TokenType};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Expression(Expr),
     Print(Expr),
     Var(Token, Option<Expr>),
     Block(Vec<Stmt>),
     If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),
-    While(Box<Expr>, Box<Stmt>)
+    While(Box<Expr>, Box<Stmt>),
+    Function(Token, Vec<Token>, Vec<Stmt>)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal {
         value: TokenLiteral
@@ -89,12 +89,13 @@ impl<'a> Parser<'a> {
         statements
     }
 
-    // declaration -> varStmt | statement 
+    // declaration -> varDecl | statement | funDecl
     fn declaration(&mut self) -> Option<Stmt> {
-        let declaration= if self.match_one_of(&[&TokenType::Var]) {
+        let declaration= if self.match_one_of(&[TokenType::Var]) {
             self.var_declaration()
-        }
-        else {
+        } else if self.match_one_of(&[TokenType::Fun]){
+            self.func_declaration("function")
+        } else {
             self.statement()
         };
 
@@ -107,36 +108,62 @@ impl<'a> Parser<'a> {
 
     // varDecl -> "var" IDENTIFIER ( "=" expression )? ";"
     fn var_declaration(&mut self) -> Option<Stmt> {
-        let name: Token = self.consume(TokenType::Identifier, "Expect variable name.").ok()?;
+        let name: Token = self.consume(TokenType::Identifier, String::from("Expect variable name.")).ok()?;
 
         let mut initializer: Option<Expr> = None;
-        if self.match_one_of(&[&TokenType::Equal]) {
+        if self.match_one_of(&[TokenType::Equal]) {
             initializer = Some(self.expression()?);
         }
 
-        self.consume(TokenType::Semicolon, "Expected a semi-colon").ok();
+        self.consume(TokenType::Semicolon, String::from("Expected a semi-colon")).ok();
         Some(Stmt::Var(name, initializer))
+    }
+
+    // funDecl -> "fun" function ;
+    fn func_declaration(&mut self, kind: &str) -> Option<Stmt> {
+        let name = self.consume(TokenType::Identifier, String::from(kind)).unwrap();
+        let _ = self.consume(TokenType::LeftParen, String::from(format!("Expect \'(\' after {kind} name.")));
+        let mut params: Vec<Token> = Vec::new();
+        if !self.check(TokenType::RightParen) {
+            loop {
+                if params.len() >= 255 {
+                    self.app.error_token(self.peek(), "Can't have more than 255 parameters.");
+                }
+
+                params.push(self.consume(TokenType::Identifier, String::from("Expect parameter name.")).unwrap());
+
+                if !self.match_one_of(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+        let _ = self.consume(TokenType::RightParen, String::from("Expect\')\' after parameters."));
+
+        let _ = self.consume(TokenType::LeftBrace, format!("Expect \'{{\' before {kind} body."));
+        let body: Vec<Stmt> = self.block_statement()?;
+
+        Some(Stmt::Function(name, params, body))
     }
 
     // statement -> exprStmt | printStmt | blockStmt | ifStmt | whileStmt ;
     fn statement(&mut self) -> Option<Stmt> {
-        if self.match_one_of(&[&TokenType::Print]) {
+        if self.match_one_of(&[TokenType::Print]) {
             return self.print_statement();
         }
 
-        if self.match_one_of(&[&TokenType::LeftBrace]) {
+        if self.match_one_of(&[TokenType::LeftBrace]) {
             return Some(Stmt::Block(self.block_statement()?));
         }
 
-        if self.match_one_of(&[&TokenType::If]) {
+        if self.match_one_of(&[TokenType::If]) {
             return self.if_statement();
         }
 
-        if self.match_one_of(&[&TokenType::While]) {
+        if self.match_one_of(&[TokenType::While]) {
             return self.while_statement();
         }
 
-        if self.match_one_of(&[&TokenType::For]) {
+        if self.match_one_of(&[TokenType::For]) {
             return self.for_statement();
         }
 
@@ -144,15 +171,15 @@ impl<'a> Parser<'a> {
     }
 
     fn for_statement(&mut self) -> Option<Stmt> {
-        let _ = self.consume(TokenType::LeftParen, "Expected \'(\' after while.");
+        let _ = self.consume(TokenType::LeftParen, String::from("Expected \'(\' after while."));
 
-        let initializer: Option<Stmt> = if self.match_one_of(&[&TokenType::Semicolon]) {None}
-            else if self.match_one_of(&[&TokenType::Var]) {Some(self.var_declaration()?)} else {Some(self.expression_statement()?)};
-        let condition: Option<Expr> = if self.check(&TokenType::Semicolon) {None} else {Some(self.expression()?)};
-        let _ = self.consume(TokenType::Semicolon, "Expected \';\' after for condition.");
+        let initializer: Option<Stmt> = if self.match_one_of(&[TokenType::Semicolon]) {None}
+            else if self.match_one_of(&[TokenType::Var]) {Some(self.var_declaration()?)} else {Some(self.expression_statement()?)};
+        let condition: Option<Expr> = if self.check(TokenType::Semicolon) {None} else {Some(self.expression()?)};
+        let _ = self.consume(TokenType::Semicolon, String::from("Expected \';\' after for condition."));
 
-        let increment: Option<Expr> = if self.check(&TokenType::RightParen) {None} else {Some(self.expression()?)};
-        let _ = self.consume(TokenType::RightParen, "Expected \')\' after while condition.");
+        let increment: Option<Expr> = if self.check(TokenType::RightParen) {None} else {Some(self.expression()?)};
+        let _ = self.consume(TokenType::RightParen, String::from("Expected \')\' after while condition."));
 
         let mut inner: Stmt = self.statement()?;
 
@@ -176,9 +203,9 @@ impl<'a> Parser<'a> {
 
     // whileStmt -> "while" "(" expression ")" statement ;
     fn while_statement(&mut self) -> Option<Stmt> {
-        let _ = self.consume(TokenType::LeftParen, "Expected \'(\' after while.");
+        let _ = self.consume(TokenType::LeftParen, String::from("Expected \'(\' after while."));
         let condition: Expr = self.expression()?;
-        let _ = self.consume(TokenType::RightParen, "Expected \')\' after while condition.");
+        let _ = self.consume(TokenType::RightParen, String::from("Expected \')\' after while condition."));
 
         let inner: Stmt = self.statement()?;
         Some(Stmt::While(Box::new(condition), Box::new(inner)))
@@ -187,12 +214,12 @@ impl<'a> Parser<'a> {
 
     // ifStmt -> "if" "(" expression ")" statement ( "else" statement)? ;
     fn if_statement(&mut self) -> Option<Stmt> {
-        let _ = self.consume(TokenType::LeftParen, "Expected \'(\' after if");
+        let _ = self.consume(TokenType::LeftParen, String::from("Expected \'(\' after if"));
         let condition: Expr = self.expression()?;
-        let _ = self.consume(TokenType::RightParen, "Expected \')\' after if condition");
+        let _ = self.consume(TokenType::RightParen, String::from("Expected \')\' after if condition"));
 
         let then_branch: Stmt = self.statement()?;
-        let else_branch: Option<Box<Stmt>> = if self.match_one_of(&[&TokenType::Else]) {Some(Box::new(self.statement()?))} else {None};
+        let else_branch: Option<Box<Stmt>> = if self.match_one_of(&[TokenType::Else]) {Some(Box::new(self.statement()?))} else {None};
 
 
         Some(Stmt::If(Box::new(condition), Box::new(then_branch), else_branch))
@@ -202,25 +229,25 @@ impl<'a> Parser<'a> {
     fn block_statement(&mut self) -> Option<Vec<Stmt>> {
         let mut statements: Vec<Stmt> = vec!();
 
-        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
             statements.push(self.declaration()?);
         }
 
-        self.consume(TokenType::RightBrace, "Expected \'}\' after block").expect("Error");
+        self.consume(TokenType::RightBrace, String::from("Expected \'}\' after block")).expect("Error");
         Some(statements)
     }
 
     // printStmt -> "print" expression ";"
     fn print_statement(&mut self) -> Option<Stmt> {
         let val: Expr = self.expression()?;
-        let _ = self.consume(TokenType::Semicolon, "Expected \';\' after statement.");
+        let _ = self.consume(TokenType::Semicolon, String::from("Expected \';\' after statement."));
         Some(Stmt::Print(val))
     }
 
     // exprStmt -> expression ";"
     fn expression_statement(&mut self) -> Option<Stmt> {
         let val: Expr = self.expression()?;
-        let _ = self.consume(TokenType::Semicolon, "Expected \';\' after statement.");
+        let _ = self.consume(TokenType::Semicolon, String::from("Expected \';\' after statement."));
         Some(Stmt::Expression(val))
     }
 
@@ -232,7 +259,7 @@ impl<'a> Parser<'a> {
     // assignment -> IDENTIFIER "=" assignment | logic_or;
     fn assignment(&mut self) -> Option<Expr> {
         let expr: Expr = self.or()?;
-        if self.match_one_of(&[&TokenType::Equal]) {
+        if self.match_one_of(&[TokenType::Equal]) {
             let equals: Token = self.previous();
             let value: Expr =  self.assignment()?;
 
@@ -251,7 +278,7 @@ impl<'a> Parser<'a> {
     fn or(&mut self) -> Option<Expr> {
         let mut expr: Expr = self.and()?;
 
-        while self.match_one_of(&[&TokenType::Or]) {
+        while self.match_one_of(&[TokenType::Or]) {
             let operator: Token = self.previous();
             let right: Expr = self.and()?;
             expr = Expr::Logical { left: Box::new(expr), operator, right: Box::new(right)}
@@ -264,7 +291,7 @@ impl<'a> Parser<'a> {
     fn and(&mut self) -> Option<Expr> {
         let mut expr: Expr = self.equality()?;
 
-        while self.match_one_of(&[&TokenType::And]) {
+        while self.match_one_of(&[TokenType::And]) {
             let operator: Token = self.previous();
             let right: Expr = self.equality()?;
             expr = Expr::Logical { left: Box::new(expr), operator, right: Box::new(right) }
@@ -277,7 +304,7 @@ impl<'a> Parser<'a> {
     fn equality(&mut self) -> Option<Expr> {
         let mut expr: Expr = self.comparison()?;
 
-        while self.match_one_of(&[&TokenType::BangEqual, &TokenType::EqualEqual]) {
+        while self.match_one_of(&[TokenType::BangEqual, TokenType::EqualEqual]) {
             let operator: Token = self.previous();
             let right: Expr = self.comparison()?;
             expr = Expr::Binary { left: Box::new(expr), operator, right: Box::new(right)}
@@ -289,7 +316,7 @@ impl<'a> Parser<'a> {
     fn comparison(&mut self) -> Option<Expr> {
         let mut expr: Expr = self.term()?;
 
-        while self.match_one_of(&[&TokenType::Greater, &TokenType::LessEqual, &TokenType::GreaterEqual, &TokenType::Less]) {
+        while self.match_one_of(&[TokenType::Greater, TokenType::LessEqual, TokenType::GreaterEqual, TokenType::Less]) {
             let operator: Token = self.previous();
             let right: Expr = self.term()?;
             expr = Expr::Binary { left: Box::new(expr), operator, right: Box::new(right) }
@@ -301,7 +328,7 @@ impl<'a> Parser<'a> {
     fn term(&mut self) -> Option<Expr> {
         let mut expr: Option<Expr> = self.factor();
 
-        while self.match_one_of(&[&TokenType::Minus, &TokenType::Plus]) {
+        while self.match_one_of(&[TokenType::Minus, TokenType::Plus]) {
             let operator: Token = self.previous();
             let right: Expr = self.factor()?;
             expr = Some(Expr::Binary { left: Box::new(expr?), operator, right: Box::new(right) })
@@ -313,7 +340,7 @@ impl<'a> Parser<'a> {
     fn factor(&mut self) -> Option<Expr> {
         let mut expr: Expr = self.unary()?;
 
-        while self.match_one_of(&[&TokenType::Slash, &TokenType::Star]) {
+        while self.match_one_of(&[TokenType::Slash, TokenType::Star]) {
             let operator: Token = self.previous();
             let right: Expr = self.unary()?;
             expr = Expr::Binary { left: Box::new(expr), operator, right: Box::new(right) }
@@ -323,7 +350,7 @@ impl<'a> Parser<'a> {
 
     // unary -> (! | -) unary | call ;
     fn unary(&mut self) -> Option<Expr> {
-        if self.match_one_of(&[&TokenType::Bang, &TokenType::Minus]) {
+        if self.match_one_of(&[TokenType::Bang, TokenType::Minus]) {
             let operator: Token = self.previous();
             let right: Expr = self.unary()?;
             let expr = Expr::Unary { operator, right: Box::new(right) };
@@ -336,9 +363,9 @@ impl<'a> Parser<'a> {
     fn call(&mut self) -> Option<Expr> {
         let mut expr: Expr = self.primary()?;
         loop {
-            if self.match_one_of(&[&TokenType::LeftParen]) {
+            if self.match_one_of(&[TokenType::LeftParen]) {
                 self.peek();
-                expr = self.finish_call(expr).expect("Error: ");
+                expr = self.finish_call(expr)?;
             }
             else {
                 break;
@@ -350,27 +377,27 @@ impl<'a> Parser<'a> {
 
     // primary -> NUMBER | STRING | true | false | nil | "(" expression ")"
     fn primary(&mut self) -> Option<Expr> {
-        if self.match_one_of(&[&TokenType::False]) {
+        if self.match_one_of(&[TokenType::False]) {
             return Some(Expr::Literal { value: TokenLiteral::Bool(false)});
         }
-        if self.match_one_of(&[&TokenType::True]) {
+        if self.match_one_of(&[TokenType::True]) {
             return Some(Expr::Literal { value: TokenLiteral::Bool(true) });
         }
-        if self.match_one_of(&[&TokenType::Nil]) {
+        if self.match_one_of(&[TokenType::Nil]) {
             return Some(Expr::Literal { value: TokenLiteral::Nil });
         }
 
-        if self.match_one_of(&[&TokenType::Number, &TokenType::String]) {
+        if self.match_one_of(&[TokenType::Number, TokenType::String]) {
             return Some(Expr::Literal { value: self.previous().literal });
         }
 
-        if self.match_one_of(&[&TokenType::LeftParen]) {
+        if self.match_one_of(&[TokenType::LeftParen]) {
             let expr = self.expression();
-            let _ = self.consume(TokenType::RightParen, "Expected ')' after expression.");
+            let _ = self.consume(TokenType::RightParen, String::from("Expected ')' after expression."));
             return Some(Expr::Grouping { expression: Box::new(expr?) });
         }
 
-        if self.match_one_of(&[&TokenType::Identifier]) {
+        if self.match_one_of(&[TokenType::Identifier]) {
             return Some(Expr::Variable {name: self.previous() });
         }
 
@@ -384,9 +411,9 @@ impl<'a> Parser<'a> {
     // Helper Methods
     //
     // Checks if one of the given tokens match the current token
-    fn match_one_of(&mut self, tokentypes: &[&TokenType]) -> bool{
-        for tokentype in tokentypes {
-            if self.check(tokentype) {
+    fn match_one_of(&mut self, token_types: &[TokenType]) -> bool{
+        for token_type in token_types {
+            if self.check(*token_type) {
                 self.advance();
                 return true;
             }
@@ -398,26 +425,26 @@ impl<'a> Parser<'a> {
     // Collects function call + arguments
     fn finish_call(&mut self, callee: Expr) -> Option<Expr> {
         let mut arguments: Vec<Expr> = Vec::new();
-        if !self.check(&TokenType::RightParen) {
+        if !self.check(TokenType::RightParen) {
             loop {
-                if arguments.len() > 255 {
+                if arguments.len() >= 255 {
                     self.app.error_token(self.peek(), "Can't have more that 255 arguments");
                     return None;
                 }
                 arguments.push(self.expression()?);
-                if self.match_one_of(&[&TokenType::Comma]) {
+                if !self.match_one_of(&[TokenType::Comma]) {
                     break;
                 }
             }
         }
 
-        let paren: Token = self.consume(TokenType::RightParen, "Expect \')\' after arguments.").unwrap();
+        let paren = self.consume(TokenType::RightParen, String::from("Expect \')\' after arguments.")).unwrap();
 
         Some(Expr::Call {callee: Box::new(callee), paren, arguments})
     }
 
-    fn consume(&mut self, tokentype: TokenType, message: &'static str) -> Result<Token, &'static str> {
-        if self.check(&tokentype) {
+    fn consume(&mut self, tokentype: TokenType, message: String) -> Result<Token, String> {
+        if self.check(tokentype) {
             return Ok(self.advance());
         }
         Err(message)
@@ -454,8 +481,8 @@ impl<'a> Parser<'a> {
     }
 
     // Checks if the current token equals the given token type
-    fn check(&self, tokentype: &TokenType) -> bool {
-        if self.is_at_end() {false} else {self.peek().tokentype == *tokentype} 
+    fn check(&self, tokentype: TokenType) -> bool {
+        if self.is_at_end() {false} else {self.peek().tokentype == tokentype}
     }
 
     // Checks if the next token is EOF (the last token in the string)

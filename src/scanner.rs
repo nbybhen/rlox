@@ -1,5 +1,4 @@
-use crate::token::{Token, TokenLiteral};
-use crate::tokentype::TokenType;
+use crate::token::{Token, TokenLiteral, TokenType};
 use std::collections::HashMap;
 use crate::App;
 

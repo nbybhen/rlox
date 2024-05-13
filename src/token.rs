@@ -1,8 +1,28 @@
 use std::fmt;
 
-use crate::tokentype::TokenType;
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum TokenType {
+    // SC Tokens
+    LeftParen, RightParen, LeftBrace, RightBrace,
+    Comma, Dot, Minus, Plus, Semicolon, Slash, Star,
 
-#[derive(Debug, Clone)]
+    // DC Tokens
+    Bang, BangEqual,
+    Equal, EqualEqual,
+    Greater, GreaterEqual,
+    Less, LessEqual,
+
+    // Literals
+    Identifier, String, Number,
+
+    // Keywords
+    And, Class, Else, False, Fun, For, If, Nil, Or,
+    Print, Return, Super, This, True, Var, While,
+    EOF
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenLiteral {
     String(String),
     Number(f32),
@@ -21,7 +41,7 @@ impl fmt::Display for TokenLiteral {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub tokentype: TokenType,
     pub lexeme: String,

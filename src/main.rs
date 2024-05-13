@@ -7,16 +7,14 @@ use std::io::Write;
 use std::fs;
 
 mod scanner;
-mod tokentype;
 mod token;
 mod parser;
 mod interpreter;
 
 use crate::interpreter::Interpreter;
-use crate::token::Token;
+use crate::token::{Token, TokenType};
 use crate::parser::{Parser, Stmt};
 use crate::scanner::Scanner;
-use crate::tokentype::TokenType;
 
 pub struct App {
     had_error: Cell<bool>,
@@ -93,6 +91,8 @@ impl App {
         let mut parser: Parser = Parser::new(tokens.to_vec(), self);
         let statements: Vec<Stmt> = parser.parse();
 
+        //println!("Parser Result: {:?}", statements);
+
         if self.had_error.get() {
             return;
         }
@@ -102,6 +102,7 @@ impl App {
         if self.had_runtime_error.get() {
             process::exit(1);
         }
+
     }
 }
 

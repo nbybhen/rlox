@@ -1,5 +1,9 @@
-var a = 2;
-var c = 3;
-print a;
-print b;
-print c;
+fun sum(first, last) {
+  print first + last;
+}
+
+//sayHi("Dear", "Reader");
+print "Hello!";
+sum(1,2);
+sum(3,4);
+sum("Hello ","World");
