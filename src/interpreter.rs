@@ -1,6 +1,5 @@
 use std::cell::RefCell;
-// Interpreter
-use crate::{App, parser::{Expr, Stmt}, token::{TokenLiteral, Token, TokenType}};
+use crate::{App, parser::{Expr, Stmt}, token::{TokenLiteral, Token, TokenType}, functions::{Function, LoxFunction, StaticFunc}};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -14,92 +13,6 @@ pub enum Object {
     Nil
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct StaticFunc {
-    name: String,
-    _arity: usize,
-    func: fn(&Interpreter, &Vec<Object>) -> Result<Object, (Token, String)>
-}
-
-impl StaticFunc {
-    fn new(name: &str, arity: usize, func: fn(&Interpreter, &Vec<Object>) -> Result<Object, (Token, String)>) -> StaticFunc {
-        StaticFunc{
-            name: name.to_owned(),
-            _arity: arity,
-            func
-        }
-    }
-    fn arity(&self) -> usize {
-        self._arity
-    }
-    fn call(&self, interpreter: &Interpreter, arguments: Vec<Object>) -> Result<Object, (Token, String)> {
-        (self.func)(interpreter, &arguments)
-    }
-}
-#[derive(Debug, Clone, PartialEq)]
-pub struct LoxFunction {
-    declaration: Stmt
-}
-
-impl LoxFunction {
-    fn new(declaration: Stmt) -> LoxFunction {
-        LoxFunction{declaration}
-    }
-    fn call(&self, interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, (Token, String)> {
-        let mut env = Environment::new(Some(Rc::clone(&interpreter.globals)));
-
-        match &self.declaration {
-            Stmt::Function(name, params, body) => {
-                for i in 0..params.len() {
-                    env.define(params[i].lexeme.to_owned(), args[i].clone());
-                }
-                let result = interpreter.execute_block(body, env);
-
-                result.map(|_| Object::Nil)
-            }
-            _ => Err((Token{tokentype: TokenType::Nil, lexeme: String::new(), literal: TokenLiteral::Nil, line: 0}, String::from("unreachable")))
-        }
-    }
-
-    fn arity(&self) -> usize {
-        if let Stmt::Function(_,params,_) = &self.declaration {
-            return params.len();
-        }
-        0
-    }
-}
-
-impl std::fmt::Display for Function {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Function::NativeFunc(static_func) => write!(f, "<native fn {}>", static_func.name),
-            Function::Declared(lox_func) => write!(f, "<fn lox>")
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Function{
-    NativeFunc(StaticFunc),
-    Declared(LoxFunction)
-}
-
-impl Function{
-
-    fn call(&self, interpreter:&mut Interpreter, args: Vec<Object>) -> Result<Object, (Token, String)>{
-        match self {
-            Function::NativeFunc(static_func) => static_func.call(interpreter, args),
-            Function::Declared(lox_func) => lox_func.call(interpreter, args)
-        }
-    }
-    fn arity(&self) -> usize {
-        match self {
-            Function::NativeFunc(static_func) => static_func.arity(),
-            Function::Declared(lox_func) => lox_func.arity(),
-            _ => 0
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
@@ -113,14 +26,14 @@ impl Environment {
     }
 
     // Writes a variable into the global environment
-    fn define(&self, name: String, value: Object) -> () {
+    pub fn define(&self, name: String, value: Object) -> () {
         //println!("Value being inserted : {value:?}");
         self.values.borrow_mut().insert(name, value);
         //println!("Current environment: {:?}", self.values);
     }
 
     // Gets a variable from the global environment
-    fn get(&self, name: Token) -> Result<Object, (Token, String)> {
+    pub fn get(&self, name: Token) -> Result<Object, (Token, String)> {
         if self.values.borrow().contains_key(&name.lexeme) {
             return Ok(self.values.borrow().get(&name.lexeme).unwrap().clone());
         }
@@ -132,7 +45,7 @@ impl Environment {
     }
 
     // Reassigns a variable within the global environment if it exists 
-    fn assign(&self, name: &Token, value: &Object) -> Result<(), String>{
+    pub fn assign(&self, name: &Token, value: &Object) -> Result<(), String>{
         if self.values.borrow().contains_key(&name.lexeme) {
             self.values.borrow_mut().insert(name.lexeme.clone(), value.clone());
             return Ok(());
@@ -147,7 +60,7 @@ impl Environment {
 
 pub struct Interpreter {
     environment: Rc<Environment>,
-    globals: Rc<Environment>
+    pub globals: Rc<Environment>
 }
 
 impl Interpreter {
@@ -216,7 +129,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_block(&mut self, stmts: &Vec<Stmt>, env: Environment) -> Result<(), (Token, String)> {
+    pub fn execute_block(&mut self, stmts: &Vec<Stmt>, env: Environment) -> Result<(), (Token, String)> {
         let _ = std::mem::replace(&mut self.environment, Rc::new(env));
 
         for stmt in stmts {

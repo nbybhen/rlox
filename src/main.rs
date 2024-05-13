@@ -10,6 +10,7 @@ mod scanner;
 mod token;
 mod parser;
 mod interpreter;
+mod functions;
 
 use crate::interpreter::Interpreter;
 use crate::token::{Token, TokenType};
