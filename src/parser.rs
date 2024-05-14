@@ -9,7 +9,10 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),
     While(Box<Expr>, Box<Stmt>),
-    Function(Token, Vec<Token>, Vec<Stmt>)
+    // Token name, Vec<Token> arguments, Vec<Stmt> body
+    Function(Token, Vec<Token>, Vec<Stmt>),
+    // Token keyword, Expr value
+    Return(Token, Option<Expr>)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -145,7 +148,7 @@ impl<'a> Parser<'a> {
         Some(Stmt::Function(name, params, body))
     }
 
-    // statement -> exprStmt | printStmt | blockStmt | ifStmt | whileStmt ;
+    // statement -> exprStmt | printStmt | blockStmt | ifStmt | whileStmt | forStmt | returnStmt ;
     fn statement(&mut self) -> Option<Stmt> {
         if self.match_one_of(&[TokenType::Print]) {
             return self.print_statement();
@@ -167,7 +170,22 @@ impl<'a> Parser<'a> {
             return self.for_statement();
         }
 
+        if self.match_one_of(&[TokenType::Return]) {
+            return self.return_statement();
+        }
+
         self.expression_statement()
+    }
+
+    // returnStmt -> "return" expression? ";" ;
+    fn return_statement(&mut self) -> Option<Stmt> {
+        let keyword = self.previous();
+        let mut value = None;
+        if !self.check(TokenType::Semicolon) {
+            value = self.expression();
+        }
+        let _ = self.consume(TokenType::Semicolon, String::from("Expected \';\' after return value."));
+        Some(Stmt::Return(keyword, value))
     }
 
     fn for_statement(&mut self) -> Option<Stmt> {

@@ -81,13 +81,11 @@ impl<'a> Scanner<'a> {
     // Consumes next charater in source and returns it
     fn advance(&mut self) -> char {
         self.current += 1;
-        //println!("self.current value: {:?}", self.current);
         self.source.chars().nth(self.current - 1).unwrap()
     }
 
     fn scan_token(&mut self) -> () {
         let c = self.advance();
-        //println!("c value: {c}");
 
         match c {
             '(' => self.add_token(TokenType::LeftParen),

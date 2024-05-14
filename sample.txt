@@ -1,9 +1,13 @@
-fun sum(first, last) {
-  print first + last;
+fun makeCounter() {
+  var i = 0;
+  fun count() {
+    i = i + 1;
+    print i;
+  }
+
+  return count;
 }
 
-//sayHi("Dear", "Reader");
-print "Hello!";
-sum(1,2);
-sum(3,4);
-sum("Hello ","World");
+var counter = makeCounter();
+counter(); // "1".
+counter(); // "2".

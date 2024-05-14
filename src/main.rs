@@ -92,8 +92,6 @@ impl App {
         let mut parser: Parser = Parser::new(tokens.to_vec(), self);
         let statements: Vec<Stmt> = parser.parse();
 
-        //println!("Parser Result: {:?}", statements);
-
         if self.had_error.get() {
             return;
         }
