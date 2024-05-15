@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use crate::{App, parser::{Expr, Stmt}, token::{TokenLiteral, Token, TokenType}, functions::{Function, LoxFunction, StaticFunc}};
+use crate::{App, parser::{Expr, Stmt}, token::{TokenLiteral, Token, TokenType}, functions::{Function}};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -71,9 +71,10 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new() -> Interpreter {
         let mut globals = Rc::new(Environment::new(None));
-        globals.define(String::from("clock"), Object::Callable(Function::NativeFunc(StaticFunc::new("clock", 0, |_, _| {
+        globals.define(String::from("clock"), Object::Callable(Function::NativeFunc{name:String::from("clock"), arity:0, func:|_, _| {
             Ok(Object::Number(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).expect("").as_millis() as f32))
-        }))));
+        }}));
+
         Interpreter{ environment: Rc::clone(&globals),  globals}
     }
 
@@ -126,7 +127,7 @@ impl Interpreter {
                 }
             },
             Stmt::Function(name, params, body) => {
-                let func: Object = Object::Callable(Function::Declared(LoxFunction::new(stmt.clone(), Rc::clone(&self.environment))));
+                let func: Object = Object::Callable(Function::Declared{declaration: stmt.clone(), closure: Rc::clone(&self.environment)});
                 self.environment.define(name.clone().lexeme, func);
             },
             Stmt::Return(keyword, value) => {

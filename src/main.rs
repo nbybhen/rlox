@@ -11,6 +11,7 @@ mod token;
 mod parser;
 mod interpreter;
 mod functions;
+mod resolver;
 
 use crate::interpreter::Interpreter;
 use crate::token::{Token, TokenType};
