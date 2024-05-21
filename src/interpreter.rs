@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use crate::{App, parser::{Expr, Stmt}, token::{TokenLiteral, Token, TokenType}, functions::{Function}};
+use crate::{App, parser::{Expr, Stmt}, token::{TokenLiteral, Token, TokenType}, functions::Function};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -15,7 +15,7 @@ pub enum Object {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Error {
-    Break,
+    //Break,
     Return(Object),
     Error(Token, String)
 }
@@ -49,7 +49,7 @@ impl Environment {
         Err(Error::Error(name.clone(), format!("Undefined variable: {name}")))
     }
 
-    // Reassigns a variable within the global environment if it exists 
+    // Reassigns a variable within the global environment if it exists
     pub fn assign(&self, name: &Token, value: &Object) -> Result<(), String>{
         if self.values.borrow().contains_key(&name.lexeme) {
             self.values.borrow_mut().insert(name.lexeme.clone(), value.clone());
@@ -58,7 +58,7 @@ impl Environment {
         if self.enclosing.is_some(){
             return self.enclosing.as_ref().expect("Enclosing was wrong type").assign(name, value);
         }
-        
+
         Err(String::from("Undefined variable."))
     }
 }
@@ -70,7 +70,7 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        let mut globals = Rc::new(Environment::new(None));
+        let globals = Rc::new(Environment::new(None));
         globals.define(String::from("clock"), Object::Callable(Function::NativeFunc{name:String::from("clock"), arity:0, func:|_, _| {
             Ok(Object::Number(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).expect("").as_millis() as f32))
         }}));
@@ -126,11 +126,11 @@ impl Interpreter {
                     self.decide(inner)?;
                 }
             },
-            Stmt::Function(name, params, body) => {
+            Stmt::Function(name, _, _) => {
                 let func: Object = Object::Callable(Function::Declared{declaration: stmt.clone(), closure: Rc::clone(&self.environment)});
                 self.environment.define(name.clone().lexeme, func);
             },
-            Stmt::Return(keyword, value) => {
+            Stmt::Return(_, value) => {
                 let ret = match value {
                     Some(value_expr) => self.evaluate(value_expr)?,
                     None => Object::Nil
@@ -244,7 +244,7 @@ impl Interpreter {
                         match (left, right) {
                             (Object::Number(l), Object::Number(r)) => Ok(Object::Bool(l == r)),
                             (Object::String(l), Object::String(r)) => Ok(Object::Bool(l == r)),
-              
+
                             (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(l == r)),
                             _ => Err(Error::Error(operator.clone(), String::from("Can't check equality between different types")))
                         }
@@ -328,5 +328,3 @@ impl Interpreter {
             _ => true
         }
     }
-  
-

@@ -12,9 +12,9 @@ pub enum Function{
 impl Function{
     pub fn call(&self, interpreter:&mut Interpreter, args: Vec<Object>) -> Result<Object, Error>{
         match self {
-            Function::NativeFunc{name, arity, func} => (func)(interpreter, &args),
+            Function::NativeFunc{name:_, arity:_, func} => (func)(interpreter, &args),
             Function::Declared{declaration, closure} => {
-                let mut env = Environment::new(Some(Rc::clone(&closure)));
+                let env = Environment::new(Some(Rc::clone(&closure)));
 
                 match &declaration {
                     Stmt::Function(_, params, body) => {
@@ -42,7 +42,6 @@ impl Function{
                 }
                 0
             },
-            _ => 0
         }
     }
 }
