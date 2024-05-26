@@ -71,7 +71,9 @@ impl<'a> Resolver<'a> {
     }
 
     fn resolve_local(&mut self, expr: &Expr, name: &Token) {
+        //println!("Current Scopes: {:?}", self.scopes);
         for (index, scope) in self.scopes.iter().enumerate().rev() {
+            //println!("Depth: {:?}", self.scopes.len() - 1 - index);
             if scope.contains_key(&name.lexeme) {
                 self.interpreter
                     .resolve(expr, self.scopes.len() - 1 - index);
@@ -103,7 +105,7 @@ impl<'a> Resolver<'a> {
                 self.resolve(stmts);
                 self.end_scope();
             }
-            Stmt::Function(name, args, body) => {
+            Stmt::Function(name, _, _) => {
                 self.declare(name);
                 self.define(name);
 
@@ -151,16 +153,17 @@ impl<'a> Resolver<'a> {
         match expr {
             Expr::Variable { name } => {
                 //println!("Self scopes: {:?}", self.scopes);
-                if !self.scopes.is_empty()
-                    && self.scopes.last().unwrap().get(&name.lexeme).copied() == Some(false)
+                if (!self.scopes.is_empty()
+                    && self.scopes.last().unwrap().get(&name.lexeme).copied() == Some(false))
                 {
                     self.app.error_token(
                         name.clone(),
                         "Can't read local variable in its own initializer",
                     );
-
-                    self.resolve_local(expr, name);
                 }
+                //println!("Calling Resolve_local!");
+
+                self.resolve_local(expr, name);
             }
             Expr::Assign { name, expr } => {
                 self.resolve_expr(expr);

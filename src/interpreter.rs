@@ -87,7 +87,7 @@ impl Environment {
 
     fn ancestor(&self, dist: usize) -> Environment {
         let mut env = self;
-        for i in 0..dist {
+        for _ in 0..dist {
             if let Some(inner) = env.enclosing.as_ref() {
                 env = inner;
             }
