@@ -150,7 +150,7 @@ impl<'a> Resolver<'a> {
     fn resolve_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Variable { name } => {
-                println!("Self scopes: {:?}", self.scopes);
+                //println!("Self scopes: {:?}", self.scopes);
                 if !self.scopes.is_empty()
                     && self.scopes.last().unwrap().get(&name.lexeme).copied() == Some(false)
                 {

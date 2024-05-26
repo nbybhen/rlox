@@ -335,7 +335,7 @@ impl Interpreter {
                     )),
                 }
             }
-            Expr::Variable { name } => Ok(self.lookup_variable(name, expr)),
+            Expr::Variable { name } => self.lookup_variable(name, expr),
             Expr::Assign { name, expr } => {
                 let value: Object = self.evaluate(expr)?;
 
@@ -416,12 +416,13 @@ impl Interpreter {
         }
     }
 
-    fn lookup_variable(&self, name: &Token, expr: &Expr) -> Object {
+    fn lookup_variable(&self, name: &Token, expr: &Expr) -> Result<Object, Error> {
         let distance = self.locals.get(expr);
         if let Some(dist) = distance {
-            return self.environment.get_at(*dist, name.lexeme.clone());
+            return Ok(self.environment.get_at(*dist, name.lexeme.clone()));
+        } else {
+            return self.globals.get(name.clone());
         }
-        Object::Nil
     }
 }
 
