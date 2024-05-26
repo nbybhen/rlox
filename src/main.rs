@@ -2,21 +2,23 @@ use std::cell::Cell;
 use std::env;
 use std::process;
 
+use std::fs;
 use std::io;
 use std::io::Write;
-use std::fs;
 
+mod functions;
+mod interpreter;
+mod parser;
+mod resolver;
 mod scanner;
 mod token;
-mod parser;
-mod interpreter;
-mod functions;
-mod resolver;
+
+use resolver::Resolver;
 
 use crate::interpreter::Interpreter;
-use crate::token::{Token, TokenType};
 use crate::parser::{Parser, Stmt};
 use crate::scanner::Scanner;
+use crate::token::{Token, TokenType};
 
 pub struct App {
     had_error: Cell<bool>,
@@ -25,7 +27,6 @@ pub struct App {
 
 impl App {
     fn new() -> App {
-
         App {
             had_error: Cell::new(false),
             had_runtime_error: Cell::new(false),
@@ -40,8 +41,7 @@ impl App {
     pub fn error_token(&self, token: Token, message: &str) {
         if token.tokentype == TokenType::EOF {
             self.report(token.line, String::from(" at end"), message);
-        }
-        else {
+        } else {
             self.report(token.line, format!(" at '{:}'", token.lexeme), message);
         }
     }
@@ -61,7 +61,7 @@ impl App {
     fn run_file(&self, interpreter: &mut Interpreter, path: &String) {
         match fs::read_to_string(path) {
             Ok(data) => self.run(data, interpreter),
-            _ => eprintln!("Could not read file.")
+            _ => eprintln!("Could not read file."),
         }
     }
 
@@ -97,17 +97,20 @@ impl App {
             return;
         }
 
+        let mut resolver = Resolver::new(interpreter, self);
+        resolver.resolve(&statements);
+
+        if self.had_error.get() {
+            return;
+        }
+
         let _ = interpreter.interpret(&statements, self);
 
         if self.had_runtime_error.get() {
             process::exit(1);
         }
-
     }
 }
-
-
-
 
 fn main() {
     let app: App = App::new();
@@ -122,6 +125,6 @@ fn main() {
         _ => {
             println!("Improper syntax: Use \"rlox [script]\"");
             process::exit(64);
-        },
+        }
     }
 }

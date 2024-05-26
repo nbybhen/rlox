@@ -1,5 +1,10 @@
+use crate::{
+    functions::Function,
+    parser::{Expr, Stmt},
+    token::{Token, TokenLiteral, TokenType},
+    App,
+};
 use std::cell::RefCell;
-use crate::{App, parser::{Expr, Stmt}, token::{TokenLiteral, Token, TokenType}, functions::Function};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -10,26 +15,28 @@ pub enum Object {
     Number(f32),
     Bool(bool),
     Callable(Function),
-    Nil
+    Nil,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Error {
     //Break,
     Return(Object),
-    Error(Token, String)
+    Error(Token, String),
 }
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
     values: RefCell<HashMap<String, Object>>,
-    enclosing: Option<Rc<Environment>>
+    enclosing: Option<Rc<Environment>>,
 }
 
 impl Environment {
     pub fn new(env: Option<Rc<Environment>>) -> Environment {
-        Environment { values: RefCell::new(HashMap::new()), enclosing: env}
+        Environment {
+            values: RefCell::new(HashMap::new()),
+            enclosing: env,
+        }
     }
 
     // Writes a variable into the global environment
@@ -46,97 +53,161 @@ impl Environment {
             return self.enclosing.as_ref().unwrap().get(name);
         }
 
-        Err(Error::Error(name.clone(), format!("Undefined variable: {name}")))
+        Err(Error::Error(
+            name.clone(),
+            format!("Undefined variable: {name}"),
+        ))
     }
 
     // Reassigns a variable within the global environment if it exists
-    pub fn assign(&self, name: &Token, value: &Object) -> Result<(), String>{
+    pub fn assign(&self, name: &Token, value: &Object) -> Result<(), String> {
         if self.values.borrow().contains_key(&name.lexeme) {
-            self.values.borrow_mut().insert(name.lexeme.clone(), value.clone());
+            self.values
+                .borrow_mut()
+                .insert(name.lexeme.clone(), value.clone());
             return Ok(());
         }
-        if self.enclosing.is_some(){
-            return self.enclosing.as_ref().expect("Enclosing was wrong type").assign(name, value);
+        if self.enclosing.is_some() {
+            return self
+                .enclosing
+                .as_ref()
+                .expect("Enclosing was wrong type")
+                .assign(name, value);
         }
 
         Err(String::from("Undefined variable."))
+    }
+
+    pub fn assign_at(&self, dist: usize, name: &Token, value: &Object) {
+        self.ancestor(dist)
+            .values
+            .borrow_mut()
+            .insert(name.lexeme.clone(), value.clone());
+    }
+
+    fn ancestor(&self, dist: usize) -> Environment {
+        let mut env = self;
+        for i in 0..dist {
+            if let Some(inner) = env.enclosing.as_ref() {
+                env = inner;
+            }
+        }
+
+        env.clone()
+    }
+
+    fn get_at(&self, dist: usize, name: String) -> Object {
+        self.ancestor(dist)
+            .values
+            .borrow()
+            .get(&name)
+            .unwrap()
+            .clone()
     }
 }
 
 pub struct Interpreter {
     environment: Rc<Environment>,
-    pub globals: Rc<Environment>
+    pub globals: Rc<Environment>,
+    locals: HashMap<Expr, usize>,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
         let globals = Rc::new(Environment::new(None));
-        globals.define(String::from("clock"), Object::Callable(Function::NativeFunc{name:String::from("clock"), arity:0, func:|_, _| {
-            Ok(Object::Number(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).expect("").as_millis() as f32))
-        }}));
+        globals.define(
+            String::from("clock"),
+            Object::Callable(Function::NativeFunc {
+                name: String::from("clock"),
+                arity: 0,
+                func: |_, _| {
+                    Ok(Object::Number(
+                        SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .expect("")
+                            .as_millis() as f32,
+                    ))
+                },
+            }),
+        );
 
-        Interpreter{ environment: Rc::clone(&globals),  globals}
+        Interpreter {
+            environment: Rc::clone(&globals),
+            globals,
+            locals: HashMap::new(),
+        }
     }
 
-    pub fn interpret(&mut self, statements: &Vec<Stmt>, app: &App) -> Result<(), (Token, &'static str)> {
+    pub fn interpret(
+        &mut self,
+        statements: &Vec<Stmt>,
+        app: &App,
+    ) -> Result<(), (Token, &'static str)> {
         for stmt in statements {
             match self.decide(stmt) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(Error::Error(token, msg)) => {
                     app.runtime_error(token, &msg);
                     break;
-                },
+                }
                 _ => {}
             }
         }
         Ok(())
     }
 
+    pub fn resolve(&mut self, expr: &Expr, depth: usize) {
+        self.locals.insert(expr.clone(), depth);
+    }
+
     fn decide(&mut self, stmt: &Stmt) -> Result<(), Error> {
         match stmt {
             Stmt::Print(e) => {
-                println!("{:?}",self.evaluate(e)?);
-            },
+                println!("{:?}", self.evaluate(e)?);
+            }
             Stmt::Expression(e) => {
                 let _ = self.evaluate(e)?;
-            },
+            }
             Stmt::Var(n, v) => {
                 if let Some(expr) = v {
                     let value = self.evaluate(expr);
                     self.environment.define(n.lexeme.clone(), value.unwrap());
-                }
-                else {
+                } else {
                     self.environment.define(n.lexeme.clone(), Object::Nil);
                 }
-            },
+            }
             Stmt::Block(stmts) => {
                 self.execute_block(stmts, Environment::new(Some(Rc::clone(&self.environment))))?;
-            },
+            }
             Stmt::If(condition, then, el) => {
-                let res = self.evaluate(condition).expect("Couldn't read if condition.");
+                let res = self
+                    .evaluate(condition)
+                    .expect("Couldn't read if condition.");
                 if is_truthy(&res) {
                     self.decide(then)?;
-                }
-                else if let Some(v) = el {
+                } else if let Some(v) = el {
                     self.decide(&v)?;
                 }
-            },
+            }
             Stmt::While(condition, inner) => {
                 while is_truthy(&self.evaluate(condition).unwrap()) {
                     self.decide(inner)?;
                 }
-            },
+            }
             Stmt::Function(name, _, _) => {
-                let func: Object = Object::Callable(Function::Declared{declaration: stmt.clone(), closure: Rc::clone(&self.environment)});
+                let func: Object = Object::Callable(Function::Declared {
+                    declaration: stmt.clone(),
+                    closure: Rc::clone(&self.environment),
+                });
                 self.environment.define(name.clone().lexeme, func);
-            },
+            }
             Stmt::Return(_, value) => {
                 let ret = match value {
                     Some(value_expr) => self.evaluate(value_expr)?,
-                    None => Object::Nil
+                    None => Object::Nil,
                 };
 
-                return Err(Error::Return(ret))
+                return Err(Error::Return(ret));
             }
         }
         Ok(())
@@ -147,7 +218,7 @@ impl Interpreter {
 
         for stmt in stmts {
             match self.decide(&stmt) {
-                Ok(()) => {},
+                Ok(()) => {}
                 Err(err) => {
                     self.environment = previous;
                     return Err(err);
@@ -159,13 +230,13 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, Error>  {
+    pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, Error> {
         match expr {
             Expr::Literal { value } => match value {
-                TokenLiteral::String ( value ) => Ok(Object::String(String::from(value))),
-                TokenLiteral::Number ( value ) => Ok(Object::Number(*value)),
-                TokenLiteral::Bool ( value ) => Ok(Object::Bool(*value)),
-                TokenLiteral::Nil => Ok(Object::Nil)
+                TokenLiteral::String(value) => Ok(Object::String(String::from(value))),
+                TokenLiteral::Number(value) => Ok(Object::Number(*value)),
+                TokenLiteral::Bool(value) => Ok(Object::Bool(*value)),
+                TokenLiteral::Nil => Ok(Object::Nil),
             },
             Expr::Grouping { expression } => self.evaluate(expression),
             Expr::Unary { operator, right } => {
@@ -175,16 +246,22 @@ impl Interpreter {
                     TokenType::Minus => {
                         if let Ok(i) = self.check_number(&right) {
                             Ok(Object::Number(-i))
-                        }
-                        else {
+                        } else {
                             Err(Error::Error(operator.clone(), String::from("Not a number")))
                         }
-                    },
+                    }
                     TokenType::Bang => Ok(Object::Bool(!is_truthy(&right))),
-                    _ => Err(Error::Error(operator.clone(), String::from("Not a valid unary operator.")))
+                    _ => Err(Error::Error(
+                        operator.clone(),
+                        String::from("Not a valid unary operator."),
+                    )),
                 }
-            },
-            Expr::Binary { left, operator, right } => {
+            }
+            Expr::Binary {
+                left,
+                operator,
+                right,
+            } => {
                 let left = self.evaluate(left)?;
                 let right = self.evaluate(right)?;
 
@@ -192,81 +269,88 @@ impl Interpreter {
                     TokenType::Minus => {
                         if let Ok((l, r)) = self.check_numbers(&left, &right) {
                             Ok(Object::Number(l - r))
+                        } else {
+                            Err(Error::Error(
+                                operator.clone(),
+                                String::from("Not a valid unary operator."),
+                            ))
                         }
-                        else {
-                            Err(Error::Error(operator.clone(), String::from("Not a valid unary operator.")))
-                        }
-                    },
-                    TokenType::Slash => {
-                        match self.check_numbers(&left, &right) {
-                            Ok((l,r)) => Ok(Object::Number(l / r)),
-                            Err(msg) => Err(Error::Error(operator.clone(), msg))
-                        }
-                    },
-                    TokenType::Star => {
-                        match self.check_numbers(&left, &right) {
-                            Ok((l,r)) => Ok(Object::Number(l*r)),
-                            Err(msg) => Err(Error::Error(operator.clone(), msg))
-                        }
-                    },
-                    TokenType::Plus => {
-                        match (left, right) {
-                            (Object::Number(l), Object::Number(r)) => Ok(Object::Number(l + r)),
-                            (Object::String(l), Object::String(r)) => Ok(Object::String(format!("{}{}", l, r))),
-                            _ => Err(Error::Error(operator.clone(), String::from("\'+\' can only be used on two numbers or two strings")))
-                        }
-                    },
-                    TokenType::Greater => {
-                        match self.check_numbers(&left, &right) {
-                            Ok((l,r)) => Ok(Object::Bool(l > r)),
-                            Err(msg) => Err(Error::Error(operator.clone(), msg))
-                        }
-                    },
-                    TokenType::GreaterEqual => {
-                        match self.check_numbers(&left, &right) {
-                            Ok((l,r)) => Ok(Object::Bool(l>=r)),
-                            Err(msg) => Err(Error::Error(operator.clone(), msg))
                     }
+                    TokenType::Slash => match self.check_numbers(&left, &right) {
+                        Ok((l, r)) => Ok(Object::Number(l / r)),
+                        Err(msg) => Err(Error::Error(operator.clone(), msg)),
                     },
-                    TokenType::Less => {
-                        match self.check_numbers(&left, &right) {
-                            Ok((l,r)) => Ok(Object::Bool(l<r)),
-                            Err(msg) => Err(Error::Error(operator.clone(), msg))
+                    TokenType::Star => match self.check_numbers(&left, &right) {
+                        Ok((l, r)) => Ok(Object::Number(l * r)),
+                        Err(msg) => Err(Error::Error(operator.clone(), msg)),
+                    },
+                    TokenType::Plus => match (left, right) {
+                        (Object::Number(l), Object::Number(r)) => Ok(Object::Number(l + r)),
+                        (Object::String(l), Object::String(r)) => {
+                            Ok(Object::String(format!("{}{}", l, r)))
                         }
+                        _ => Err(Error::Error(
+                            operator.clone(),
+                            String::from("\'+\' can only be used on two numbers or two strings"),
+                        )),
                     },
-                    TokenType::LessEqual => {
-                        match self.check_numbers(&left, &right) {
-                            Ok((l,r)) => Ok(Object::Bool(l<=r)),
-                            Err(msg) => Err(Error::Error(operator.clone(), msg))
-                        }
+                    TokenType::Greater => match self.check_numbers(&left, &right) {
+                        Ok((l, r)) => Ok(Object::Bool(l > r)),
+                        Err(msg) => Err(Error::Error(operator.clone(), msg)),
                     },
-                    TokenType::EqualEqual => {
-                        match (left, right) {
-                            (Object::Number(l), Object::Number(r)) => Ok(Object::Bool(l == r)),
-                            (Object::String(l), Object::String(r)) => Ok(Object::Bool(l == r)),
+                    TokenType::GreaterEqual => match self.check_numbers(&left, &right) {
+                        Ok((l, r)) => Ok(Object::Bool(l >= r)),
+                        Err(msg) => Err(Error::Error(operator.clone(), msg)),
+                    },
+                    TokenType::Less => match self.check_numbers(&left, &right) {
+                        Ok((l, r)) => Ok(Object::Bool(l < r)),
+                        Err(msg) => Err(Error::Error(operator.clone(), msg)),
+                    },
+                    TokenType::LessEqual => match self.check_numbers(&left, &right) {
+                        Ok((l, r)) => Ok(Object::Bool(l <= r)),
+                        Err(msg) => Err(Error::Error(operator.clone(), msg)),
+                    },
+                    TokenType::EqualEqual => match (left, right) {
+                        (Object::Number(l), Object::Number(r)) => Ok(Object::Bool(l == r)),
+                        (Object::String(l), Object::String(r)) => Ok(Object::Bool(l == r)),
 
-                            (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(l == r)),
-                            _ => Err(Error::Error(operator.clone(), String::from("Can't check equality between different types")))
-                        }
+                        (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(l == r)),
+                        _ => Err(Error::Error(
+                            operator.clone(),
+                            String::from("Can't check equality between different types"),
+                        )),
                     },
-                    TokenType::BangEqual => {
-                        match (left, right) {
-                            (Object::Number(l), Object::Number(r)) => Ok(Object::Bool(l != r)),
-                            (Object::String(l), Object::String(r)) => Ok(Object::Bool(l != r)),
-                            (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(l != r)),
-                            _ => Err(Error::Error(operator.clone(), String::from("Can't check equality between different types")))
-                        }
-                    }
-                    _ => Err(Error::Error(operator.clone(), String::from("Not a valid binary operation")))
+                    TokenType::BangEqual => match (left, right) {
+                        (Object::Number(l), Object::Number(r)) => Ok(Object::Bool(l != r)),
+                        (Object::String(l), Object::String(r)) => Ok(Object::Bool(l != r)),
+                        (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(l != r)),
+                        _ => Err(Error::Error(
+                            operator.clone(),
+                            String::from("Can't check equality between different types"),
+                        )),
+                    },
+                    _ => Err(Error::Error(
+                        operator.clone(),
+                        String::from("Not a valid binary operation"),
+                    )),
                 }
-            },
-            Expr::Variable { name } => Ok(self.environment.get(name.clone())?),
+            }
+            Expr::Variable { name } => Ok(self.lookup_variable(name, expr)),
             Expr::Assign { name, expr } => {
                 let value: Object = self.evaluate(expr)?;
+
+                if let Some(dist) = self.locals.get(expr) {
+                    self.environment.assign_at(*dist, name, &value);
+                }
+
                 let _ = self.environment.assign(name, &value);
                 Ok(value)
-            },
-            Expr::Logical { left, operator, right } => {
+            }
+            Expr::Logical {
+                left,
+                operator,
+                right,
+            } => {
                 let left = self.evaluate(left);
 
                 match operator.tokentype {
@@ -274,7 +358,7 @@ impl Interpreter {
                         if is_truthy(&left.clone()?) {
                             return left;
                         }
-                    },
+                    }
                     _ => {
                         if !is_truthy(&left.clone()?) {
                             return left;
@@ -284,8 +368,12 @@ impl Interpreter {
 
                 self.evaluate(right)
             }
-            Expr::Call {callee, paren, arguments} => {
-                let callee= self.evaluate(callee)?;
+            Expr::Call {
+                callee,
+                paren,
+                arguments,
+            } => {
+                let callee = self.evaluate(callee)?;
                 let mut eval_args: Vec<Object> = Vec::new();
 
                 for argument in arguments {
@@ -294,12 +382,21 @@ impl Interpreter {
 
                 if let Object::Callable(function) = callee.clone() {
                     if arguments.len() != function.arity() {
-                        return Err(Error::Error(paren.clone(), format!("Expected {} arguments but got {}.", function.arity(), arguments.len())));
+                        return Err(Error::Error(
+                            paren.clone(),
+                            format!(
+                                "Expected {} arguments but got {}.",
+                                function.arity(),
+                                arguments.len()
+                            ),
+                        ));
                     }
                     return function.call(self, eval_args);
-                }
-                else {
-                    return Err(Error::Error(paren.clone(), String::from("Can only call functions and classes.")));
+                } else {
+                    return Err(Error::Error(
+                        paren.clone(),
+                        String::from("Can only call functions and classes."),
+                    ));
                 }
             }
         }
@@ -309,22 +406,30 @@ impl Interpreter {
     fn check_number(&self, num: &Object) -> Result<f32, String> {
         match num {
             Object::Number(i) => Ok(*i),
-            _ => Err(String::from("Input must be numerical objects"))
+            _ => Err(String::from("Input must be numerical objects")),
         }
     }
-    fn check_numbers(&self, left: &Object, right: &Object) -> Result<(f32,f32), String> {
+    fn check_numbers(&self, left: &Object, right: &Object) -> Result<(f32, f32), String> {
         match (left, right) {
-            (Object::Number(l), Object::Number(r)) => Ok((*l,*r)),
-            _ => Err(String::from("Inputs must be numerical objects"))
+            (Object::Number(l), Object::Number(r)) => Ok((*l, *r)),
+            _ => Err(String::from("Inputs must be numerical objects")),
         }
+    }
+
+    fn lookup_variable(&self, name: &Token, expr: &Expr) -> Object {
+        let distance = self.locals.get(expr);
+        if let Some(dist) = distance {
+            return self.environment.get_at(*dist, name.lexeme.clone());
+        }
+        Object::Nil
     }
 }
 
 // Returns whether an object is considered "truthy" or not
-    fn is_truthy(object: &Object) -> bool {
-        match *object {
-            Object::Bool(x) => x,
-            Object::Nil => false,
-            _ => true
-        }
+fn is_truthy(object: &Object) -> bool {
+    match *object {
+        Object::Bool(x) => x,
+        Object::Nil => false,
+        _ => true,
     }
+}
