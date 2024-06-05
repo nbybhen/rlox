@@ -1,5 +1,5 @@
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 #[derive(Debug, Copy, Clone, PartialEq, Hash, Eq)]
 pub enum TokenType {

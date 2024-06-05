@@ -1,12 +1,14 @@
 use crate::interpreter::{Environment, Error, Interpreter, Object};
 use crate::parser::Stmt;
 use crate::token::{Token, TokenLiteral, TokenType};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 #[derive(PartialEq)]
 pub enum FunctionType {
     None,
     Function,
+    Method,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -20,11 +22,32 @@ pub enum Function {
         declaration: Stmt,
         closure: Rc<Environment>,
     },
+    Class {
+        name: String,
+        methods: HashMap<String, Object>,
+    },
 }
 
 impl Function {
+    pub fn find_method(&self, name: String) -> Option<Object> {
+        match self {
+            Function::Class { name: _, methods } => {
+                if methods.contains_key(&name) {
+                    return methods.get(&name).cloned();
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
     pub fn call(&self, interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, Error> {
         match self {
+            Function::Class { name: _, .. } => {
+                // Might cause issues down the line
+                let instance = Object::Instance(self.clone(), HashMap::new());
+                Ok(instance)
+            }
             Function::NativeFunc {
                 name: _,
                 arity: _,
@@ -76,6 +99,7 @@ impl Function {
                 }
                 0
             }
+            Function::Class { name: _, .. } => 0,
         }
     }
 }
@@ -92,6 +116,7 @@ impl std::fmt::Display for Function {
                 declaration: _,
                 closure: _,
             } => write!(f, "<fn lox>"),
+            Function::Class { name, .. } => write!(f, "{name}"),
         }
     }
 }

@@ -146,6 +146,14 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(condition);
                 self.resolve_stmt(body);
             }
+            Stmt::Class(name, methods) => {
+                self.declare(name);
+                self.define(name);
+
+                for method in methods {
+                    self.resolve_func(method, FunctionType::Method);
+                }
+            }
         }
     }
 
@@ -153,8 +161,8 @@ impl<'a> Resolver<'a> {
         match expr {
             Expr::Variable { name } => {
                 //println!("Self scopes: {:?}", self.scopes);
-                if (!self.scopes.is_empty()
-                    && self.scopes.last().unwrap().get(&name.lexeme).copied() == Some(false))
+                if !self.scopes.is_empty()
+                    && self.scopes.last().unwrap().get(&name.lexeme).copied() == Some(false)
                 {
                     self.app.error_token(
                         name.clone(),
@@ -203,6 +211,15 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(right);
             }
             Expr::Literal { value: _ } => {}
+            Expr::Get { object, name: _ } => self.resolve_expr(object),
+            Expr::Set {
+                object,
+                name: _,
+                value,
+            } => {
+                self.resolve_expr(value);
+                self.resolve_expr(object);
+            }
         }
     }
 

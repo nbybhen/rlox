@@ -14,8 +14,50 @@ pub enum Object {
     String(String),
     Number(f32),
     Bool(bool),
+    // Function class, HashMap<String, Object> fields
+    Instance(Function, HashMap<String, Object>),
     Callable(Function),
     Nil,
+}
+
+impl Object {
+    fn get(&self, name: &Token) -> Result<Object, Error> {
+        match self {
+            Object::Instance(class, fields) => {
+                if fields.contains_key(&name.lexeme) {
+                    return fields.get(&name.lexeme.clone()).cloned().ok_or_else(|| {
+                        Error::Error(
+                            name.clone(),
+                            format!("Undefined property: {:}", name.lexeme),
+                        )
+                    });
+                }
+                let method = class.find_method(name.lexeme.clone());
+                // Unsure if this is supposed to be an Object::Instance or Object::Callable
+                if method.is_some() {
+                    return Ok(method.unwrap());
+                }
+
+                // println!("Info: {:?}", class);
+
+                unreachable!("Must be a Function::Class instance to access methods")
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+
+    fn set(&mut self, name: &Token, value: &Object) {
+        match self {
+            Object::Instance(func, fields) => {
+                if let Function::Class { name: _, .. } = func {
+                    fields.insert(name.lexeme.clone(), value.clone());
+                }
+            }
+            _ => unreachable!("Must be an Object::Instance to call set()."),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -209,6 +251,28 @@ impl Interpreter {
 
                 return Err(Error::Return(ret));
             }
+            Stmt::Class(name, methods) => {
+                self.environment.define(name.lexeme.clone(), Object::Nil);
+
+                let mut hash_methods: HashMap<String, Object> = HashMap::new();
+
+                for method in methods {
+                    // This might not work as intended
+                    if let Stmt::Function(name, _, _) = method {
+                        let function: Object = Object::Callable(Function::Declared {
+                            declaration: method.clone(),
+                            closure: Rc::clone(&self.environment),
+                        });
+                        hash_methods.insert(name.lexeme.clone(), function);
+                    }
+                }
+
+                let class: Object = Object::Callable(Function::Class {
+                    name: name.lexeme.clone(),
+                    methods: hash_methods,
+                });
+                let _ = self.environment.assign(name, &class);
+            }
         }
         Ok(())
     }
@@ -399,6 +463,35 @@ impl Interpreter {
                     ));
                 }
             }
+            Expr::Get { object, name } => {
+                let object = self.evaluate(object)?;
+                if let Object::Instance(_, _) = object {
+                    return object.get(name);
+                }
+
+                Err(Error::Error(
+                    name.clone(),
+                    format!("Only instances have properties"),
+                ))
+            }
+            Expr::Set {
+                object,
+                name,
+                value,
+            } => {
+                let mut object = self.evaluate(object)?;
+
+                if let Object::Instance(_, _) = object {
+                    let value = self.evaluate(value)?;
+                    object.set(name, &value);
+                    Ok(value)
+                } else {
+                    Err(Error::Error(
+                        name.clone(),
+                        String::from("Only instances have fields."),
+                    ))
+                }
+            }
         }
     }
 
@@ -432,5 +525,14 @@ fn is_truthy(object: &Object) -> bool {
         Object::Bool(x) => x,
         Object::Nil => false,
         _ => true,
+    }
+}
+
+impl std::fmt::Display for Object {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Object::Instance(Function::Class { name, .. }, _) => write!(f, "{name} instance"),
+            _ => write!(f, "unformatted"),
+        }
     }
 }

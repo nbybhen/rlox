@@ -17,6 +17,8 @@ pub enum Stmt {
     Function(Token, Vec<Token>, Vec<Stmt>),
     // Token keyword, Expr value
     Return(Token, Option<Expr>),
+    // Token name, Vec<Stmt> methods
+    Class(Token, Vec<Stmt>),
 }
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
@@ -53,6 +55,15 @@ pub enum Expr {
         paren: Token,
         arguments: Vec<Expr>,
     },
+    Get {
+        object: Box<Expr>,
+        name: Token,
+    },
+    Set {
+        object: Box<Expr>,
+        name: Token,
+        value: Box<Expr>,
+    },
 }
 
 impl std::fmt::Display for Expr {
@@ -78,6 +89,12 @@ impl std::fmt::Display for Expr {
                 paren,
                 arguments,
             } => write!(f, "{callee} {paren} ({arguments:?})"),
+            Expr::Get { object, name } => write!(f, "get {object} {name}"),
+            Expr::Set {
+                object,
+                name,
+                value,
+            } => write!(f, "set {object} {name} {value}"),
         }
     }
 }
@@ -108,12 +125,14 @@ impl<'a> Parser<'a> {
         statements
     }
 
-    // declaration -> varDecl | statement | funDecl
+    // declaration -> varDecl | statement | funDecl | classDecl
     fn declaration(&mut self) -> Option<Stmt> {
         let declaration = if self.match_one_of(&[TokenType::Var]) {
             self.var_declaration()
         } else if self.match_one_of(&[TokenType::Fun]) {
             self.func_declaration("function")
+        } else if self.match_one_of(&[TokenType::Class]) {
+            self.class_declaration()
         } else {
             self.statement()
         };
@@ -123,6 +142,29 @@ impl<'a> Parser<'a> {
         }
 
         declaration
+    }
+
+    // classDecl -> "class" IDENTIFIER "{" function* "}" ;
+    fn class_declaration(&mut self) -> Option<Stmt> {
+        let name = self
+            .consume(TokenType::Identifier, String::from("Expected class name"))
+            .unwrap();
+        let _ = self.consume(
+            TokenType::LeftBrace,
+            String::from("Expected \'{\' before class body"),
+        );
+
+        let mut methods: Vec<Stmt> = vec![];
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            methods.push(self.func_declaration("function")?);
+        }
+
+        let _ = self.consume(
+            TokenType::RightBrace,
+            String::from("Expected \'}\' after class declaration"),
+        );
+
+        Some(Stmt::Class(name, methods))
     }
 
     // varDecl -> "var" IDENTIFIER ( "=" expression )? ";"
@@ -368,7 +410,7 @@ impl<'a> Parser<'a> {
         self.assignment()
     }
 
-    // assignment -> IDENTIFIER "=" assignment | logic_or;
+    // assignment -> ( call "." )? IDENTIFIER "=" assignment | logic_or;
     fn assignment(&mut self) -> Option<Expr> {
         let expr: Expr = self.or()?;
         if self.match_one_of(&[TokenType::Equal]) {
@@ -380,6 +422,14 @@ impl<'a> Parser<'a> {
                     return Some(Expr::Assign {
                         name,
                         expr: Box::new(value),
+                    });
+                }
+                Expr::Get { object, name } => {
+                    // let get = Expr::Get { object, name };
+                    return Some(Expr::Set {
+                        object,
+                        name,
+                        value: Box::new(value),
                     });
                 }
                 _ => self.app.error_token(equals, "Invalid assignment target."),
@@ -506,13 +556,24 @@ impl<'a> Parser<'a> {
 
         self.call()
     }
-    // call -> primary ( "(" arguments? ")" )* ;
+    // call -> primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
     fn call(&mut self) -> Option<Expr> {
         let mut expr: Expr = self.primary()?;
         loop {
             if self.match_one_of(&[TokenType::LeftParen]) {
                 self.peek();
                 expr = self.finish_call(expr)?;
+            } else if self.match_one_of(&[TokenType::Dot]) {
+                let name: Token = self
+                    .consume(
+                        TokenType::Identifier,
+                        String::from("Expect property name after \'.\'."),
+                    )
+                    .unwrap();
+                expr = Expr::Get {
+                    object: Box::new(expr),
+                    name,
+                }
             } else {
                 break;
             }
