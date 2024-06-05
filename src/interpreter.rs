@@ -21,6 +21,27 @@ pub enum Object {
 }
 
 impl Object {
+    fn bind(&self) -> Result<Object, Error> {
+        // This may not work as intended (binding clone of closure)
+        if let Object::Callable(func) = self {
+            match func {
+                Function::Declared {
+                    declaration,
+                    closure,
+                } => {
+                    let env = Environment::new(Some(Rc::clone(closure)));
+                    env.define(String::from("this"), self.clone());
+                    return Ok(Object::Callable(Function::Declared {
+                        declaration: declaration.clone(),
+                        closure: Rc::new(env),
+                    }));
+                }
+                _ => unreachable!("Calling binding must be on a Function::Declared"),
+            }
+        }
+        unreachable!("Calling binding must be on an Object::Callable.");
+    }
+
     fn get(&self, name: &Token) -> Result<Object, Error> {
         match self {
             Object::Instance(class, fields) => {
@@ -35,10 +56,9 @@ impl Object {
                 let method = class.find_method(name.lexeme.clone());
                 // Unsure if this is supposed to be an Object::Instance or Object::Callable
                 if method.is_some() {
-                    return Ok(method.unwrap());
+                    //println!("Method found! {:?}", method);
+                    return method.unwrap().bind();
                 }
-
-                // println!("Info: {:?}", class);
 
                 unreachable!("Must be a Function::Class instance to access methods")
             }
@@ -492,6 +512,7 @@ impl Interpreter {
                     ))
                 }
             }
+            Expr::This { keyword } => self.lookup_variable(keyword, expr),
         }
     }
 

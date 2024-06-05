@@ -64,6 +64,9 @@ pub enum Expr {
         name: Token,
         value: Box<Expr>,
     },
+    This {
+        keyword: Token,
+    },
 }
 
 impl std::fmt::Display for Expr {
@@ -95,6 +98,7 @@ impl std::fmt::Display for Expr {
                 name,
                 value,
             } => write!(f, "set {object} {name} {value}"),
+            Expr::This { keyword } => write!(f, "this: {keyword}"),
         }
     }
 }
@@ -623,6 +627,12 @@ impl<'a> Parser<'a> {
             });
         }
 
+        if self.match_one_of(&[TokenType::This]) {
+            //println!("Found {:}", self.previous());
+            return Some(Expr::This {
+                keyword: self.previous(),
+            });
+        }
         self.app.error_token(self.peek(), "Expected expression.");
 
         None

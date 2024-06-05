@@ -150,15 +150,24 @@ impl<'a> Resolver<'a> {
                 self.declare(name);
                 self.define(name);
 
+                self.begin_scope();
+                self.scopes
+                    .last_mut()
+                    .unwrap()
+                    .insert(String::from("this"), true);
+
                 for method in methods {
                     self.resolve_func(method, FunctionType::Method);
                 }
+
+                self.end_scope();
             }
         }
     }
 
     fn resolve_expr(&mut self, expr: &Expr) {
         match expr {
+            Expr::This { keyword } => self.resolve_local(expr, keyword),
             Expr::Variable { name } => {
                 //println!("Self scopes: {:?}", self.scopes);
                 if !self.scopes.is_empty()

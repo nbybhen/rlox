@@ -1,11 +1,11 @@
-class Bacon {
-  eat() {
-    print "Crunch crunch crunch!";
+class Cake {
+  taste() {
+    var adjective = "delicious";
+    //print "Entered taste() func";
+    print "The " + this.flavor + " cake is " + adjective + "!";
   }
 }
 
-Bacon().eat(); // Prints "Crunch crunch crunch!".
-
-// class Bagel {}
-// var bagel = Bagel();
-// print bagel; // Prints "Bagel instance".
+var cake = Cake();
+cake.flavor = "German chocolate";
+cake.taste(); // Prints "The German chocolate cake is delicious!".

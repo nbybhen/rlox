@@ -31,7 +31,7 @@ pub enum Function {
 impl Function {
     pub fn find_method(&self, name: String) -> Option<Object> {
         match self {
-            Function::Class { name: _, methods } => {
+            Function::Class { methods, .. } => {
                 if methods.contains_key(&name) {
                     return methods.get(&name).cloned();
                 }
@@ -43,7 +43,7 @@ impl Function {
 
     pub fn call(&self, interpreter: &mut Interpreter, args: Vec<Object>) -> Result<Object, Error> {
         match self {
-            Function::Class { name: _, .. } => {
+            Function::Class { .. } => {
                 // Might cause issues down the line
                 let instance = Object::Instance(self.clone(), HashMap::new());
                 Ok(instance)
