@@ -1,7 +1,6 @@
 class Cake {
   taste() {
     var adjective = "delicious";
-    //print "Entered taste() func";
     print "The " + this.flavor + " cake is " + adjective + "!";
   }
 }

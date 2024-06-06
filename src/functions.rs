@@ -32,9 +32,15 @@ impl Function {
     pub fn find_method(&self, name: String) -> Option<Object> {
         match self {
             Function::Class { methods, .. } => {
+                // println!("Methods: ");
+                // for (key, value) in methods.into_iter() {
+                //     println!("{} -> {}, ", key, value);
+                // }
+                //println!("Method Name: {name}");
                 if methods.contains_key(&name) {
                     return methods.get(&name).cloned();
                 }
+                //println!("Couldn't find method: {name}");
                 None
             }
             _ => None,
@@ -116,7 +122,15 @@ impl std::fmt::Display for Function {
                 declaration: _,
                 closure: _,
             } => write!(f, "<fn lox>"),
-            Function::Class { name, .. } => write!(f, "{name}"),
+            Function::Class { name, methods } => {
+                write!(f, "{name}, Methods: [");
+
+                for (key, value) in methods.into_iter() {
+                    write!(f, "{} -> {}, ", key, value);
+                }
+                write!(f, "]");
+                Ok(())
+            }
         }
     }
 }

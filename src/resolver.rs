@@ -71,9 +71,7 @@ impl<'a> Resolver<'a> {
     }
 
     fn resolve_local(&mut self, expr: &Expr, name: &Token) {
-        //println!("Current Scopes: {:?}", self.scopes);
         for (index, scope) in self.scopes.iter().enumerate().rev() {
-            //println!("Depth: {:?}", self.scopes.len() - 1 - index);
             if scope.contains_key(&name.lexeme) {
                 self.interpreter
                     .resolve(expr, self.scopes.len() - 1 - index);
@@ -169,7 +167,6 @@ impl<'a> Resolver<'a> {
         match expr {
             Expr::This { keyword } => self.resolve_local(expr, keyword),
             Expr::Variable { name } => {
-                //println!("Self scopes: {:?}", self.scopes);
                 if !self.scopes.is_empty()
                     && self.scopes.last().unwrap().get(&name.lexeme).copied() == Some(false)
                 {

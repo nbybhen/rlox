@@ -21,6 +21,39 @@ pub enum Stmt {
     Class(Token, Vec<Stmt>),
 }
 
+impl std::fmt::Display for Stmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Stmt::Expression(_) => write!(f, "unformatted (Stmt::Expression)"),
+            Stmt::Block(_) => write!(f, "unformatted (Stmt::Block)"),
+            Stmt::Class(_, _) => write!(f, "unformatted (Stmt::Class)"),
+            Stmt::Print(expr) => write!(f, "print \"{expr}\""),
+            Stmt::Return(_, _) => write!(f, "unformatted (Stmt::Return)"),
+            Stmt::Function(name, args, body) => {
+                write!(f, "function {name}({args:?}) {{\n")?;
+                for stmt in body {
+                    write!(f, "{stmt}\n")?;
+                }
+                write!(f, "}}")?;
+
+                Ok(())
+            }
+            Stmt::If(_, _, _) => write!(f, "unformatted (Stmt::If)"),
+            Stmt::While(_, _) => write!(f, "unformatted (Stmt::While)"),
+            Stmt::Var(name, initializer) => {
+                write!(f, "var {name} = ");
+                if initializer.is_some() {
+                    initializer.as_ref().inspect(|x| write!(f, "{x};").unwrap());
+                } else {
+                    write!(f, "null;");
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum Expr {
     Literal {
@@ -73,13 +106,13 @@ impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Expr::Literal { value } => write!(f, "{value}"),
-            Expr::Grouping { expression } => write!(f, "{:}", print(expression)),
-            Expr::Unary { operator, right } => write!(f, "{operator} {:}", print(right)),
+            Expr::Grouping { expression } => write!(f, "({expression})"),
+            Expr::Unary { operator, right } => write!(f, "{operator} {right}"),
             Expr::Binary {
                 left,
                 operator,
                 right,
-            } => write!(f, "{operator} {:} {:} ", print(left), print(right)),
+            } => write!(f, "{left} {operator} {right} "),
             Expr::Variable { name } => write!(f, "{name}"),
             Expr::Assign { name, expr } => write!(f, "{name} = {expr:?}"),
             Expr::Logical {
@@ -92,13 +125,13 @@ impl std::fmt::Display for Expr {
                 paren,
                 arguments,
             } => write!(f, "{callee} {paren} ({arguments:?})"),
-            Expr::Get { object, name } => write!(f, "get {object} {name}"),
+            Expr::Get { object, name } => write!(f, "get {object}.{name}"),
             Expr::Set {
                 object,
                 name,
                 value,
             } => write!(f, "set {object} {name} {value}"),
-            Expr::This { keyword } => write!(f, "this: {keyword}"),
+            Expr::This { keyword } => write!(f, "{keyword}"),
         }
     }
 }
@@ -628,7 +661,6 @@ impl<'a> Parser<'a> {
         }
 
         if self.match_one_of(&[TokenType::This]) {
-            //println!("Found {:}", self.previous());
             return Some(Expr::This {
                 keyword: self.previous(),
             });

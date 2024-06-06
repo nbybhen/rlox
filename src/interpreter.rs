@@ -20,8 +20,30 @@ pub enum Object {
     Nil,
 }
 
+impl std::fmt::Display for Object {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Object::Instance(func, fields) => {
+                write!(f, "instance {func}, fields: {{")?;
+                for (key, value) in fields.into_iter() {
+                    write!(f, "{} -> {}, ", key, value)?;
+                }
+                write!(f, "}}")?;
+                Ok(())
+            }
+            Object::Callable(Function::Declared {
+                declaration,
+                closure,
+            }) => write!(f, "callable {declaration}, closure: ()"),
+            Object::Nil => write!(f, "Nil"),
+            Object::String(s) => write!(f, "\"{s}\""),
+            _ => write!(f, "unformatted (Object)"),
+        }
+    }
+}
+
 impl Object {
-    fn bind(&self) -> Result<Object, Error> {
+    fn bind(&self, arg: &Object) -> Result<Object, Error> {
         // This may not work as intended (binding clone of closure)
         if let Object::Callable(func) = self {
             match func {
@@ -30,7 +52,7 @@ impl Object {
                     closure,
                 } => {
                     let env = Environment::new(Some(Rc::clone(closure)));
-                    env.define(String::from("this"), self.clone());
+                    env.define(String::from("this"), arg.clone());
                     return Ok(Object::Callable(Function::Declared {
                         declaration: declaration.clone(),
                         closure: Rc::new(env),
@@ -39,25 +61,28 @@ impl Object {
                 _ => unreachable!("Calling binding must be on a Function::Declared"),
             }
         }
+        //println!("{:?}", arg);
         unreachable!("Calling binding must be on an Object::Callable.");
     }
 
     fn get(&self, name: &Token) -> Result<Object, Error> {
+        println!("");
+        println!("Pre-get: {self}");
         match self {
             Object::Instance(class, fields) => {
                 if fields.contains_key(&name.lexeme) {
-                    return fields.get(&name.lexeme.clone()).cloned().ok_or_else(|| {
-                        Error::Error(
+                    return fields
+                        .get(&name.lexeme.clone())
+                        .cloned()
+                        .ok_or(Error::Error(
                             name.clone(),
                             format!("Undefined property: {:}", name.lexeme),
-                        )
-                    });
+                        ));
                 }
                 let method = class.find_method(name.lexeme.clone());
-                // Unsure if this is supposed to be an Object::Instance or Object::Callable
+
                 if method.is_some() {
-                    //println!("Method found! {:?}", method);
-                    return method.unwrap().bind();
+                    return method.unwrap().bind(self);
                 }
 
                 unreachable!("Must be a Function::Class instance to access methods")
@@ -69,13 +94,10 @@ impl Object {
     }
 
     fn set(&mut self, name: &Token, value: &Object) {
-        match self {
-            Object::Instance(func, fields) => {
-                if let Function::Class { name: _, .. } = func {
-                    fields.insert(name.lexeme.clone(), value.clone());
-                }
+        if let Object::Instance(func, ref mut fields) = self {
+            if let Function::Class { name: _, .. } = func {
+                fields.insert(name.lexeme.clone(), value.clone());
             }
-            _ => unreachable!("Must be an Object::Instance to call set()."),
         }
     }
 }
@@ -485,6 +507,7 @@ impl Interpreter {
             }
             Expr::Get { object, name } => {
                 let object = self.evaluate(object)?;
+                println!("Get object post-eval: {object}");
                 if let Object::Instance(_, _) = object {
                     return object.get(name);
                 }
@@ -503,7 +526,10 @@ impl Interpreter {
 
                 if let Object::Instance(_, _) = object {
                     let value = self.evaluate(value)?;
+                    println!("Pre-set: {object}");
                     object.set(name, &value);
+                    println!("Post-set: {object}");
+
                     Ok(value)
                 } else {
                     Err(Error::Error(
@@ -546,14 +572,5 @@ fn is_truthy(object: &Object) -> bool {
         Object::Bool(x) => x,
         Object::Nil => false,
         _ => true,
-    }
-}
-
-impl std::fmt::Display for Object {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Object::Instance(Function::Class { name, .. }, _) => write!(f, "{name} instance"),
-            _ => write!(f, "unformatted"),
-        }
     }
 }
