@@ -143,6 +143,12 @@ impl<'a> Resolver<'a> {
                         .error_token(keyword.clone(), "Can't return from top-level code.");
                 }
                 if let Some(expr) = value {
+                    if self.current_function == FunctionType::Initializer {
+                        self.app.error_token(
+                            keyword.clone(),
+                            "Can't return a value from an initializer.",
+                        )
+                    }
                     self.resolve_expr(expr);
                 }
             }
@@ -164,7 +170,13 @@ impl<'a> Resolver<'a> {
                     .insert(String::from("this"), true);
 
                 for method in methods {
-                    self.resolve_func(method, FunctionType::Method);
+                    let mut declaration = FunctionType::Method;
+                    if let Stmt::Function(name, _, _) = method {
+                        if name.lexeme.eq(&String::from("init")) {
+                            declaration = FunctionType::Initializer;
+                        }
+                    }
+                    self.resolve_func(method, declaration);
                 }
 
                 self.end_scope();

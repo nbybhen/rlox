@@ -1,6 +1,5 @@
 use crate::interpreter::{Environment, Error, Instance, Interpreter, Object};
 use crate::parser::Stmt;
-use crate::token::{Token, TokenLiteral, TokenType};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -10,6 +9,7 @@ pub enum FunctionType {
     None,
     Function,
     Method,
+    Initializer,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -22,6 +22,7 @@ pub enum Function {
     Declared {
         declaration: Stmt,
         closure: Rc<Environment>,
+        is_init: bool,
     },
     Class {
         name: String,
@@ -34,6 +35,7 @@ impl Function {
         if let Function::Declared {
             declaration,
             closure,
+            is_init,
         } = self
         {
             let env = Environment::new(Some(Rc::clone(closure)));
@@ -41,6 +43,7 @@ impl Function {
             return Function::Declared {
                 declaration: declaration.clone(),
                 closure: Rc::new(env),
+                is_init: *is_init,
             };
         } else {
             unreachable!()
@@ -49,15 +52,9 @@ impl Function {
     pub fn find_method(&self, name: &String) -> Option<Object> {
         match self {
             Function::Class { methods, .. } => {
-                // println!("Methods: ");
-                // for (key, value) in methods.into_iter() {
-                //     println!("{} -> {}, ", key, value);
-                // }
-                //println!("Method Name: {name}");
                 if methods.contains_key(name) {
                     return methods.get(name).cloned();
                 }
-                //println!("Couldn't find method: {name}");
                 None
             }
             _ => None,
@@ -68,39 +65,42 @@ impl Function {
         match self {
             Function::Class { .. } => {
                 // Might cause issues down the line
-                let instance = Object::Instance(Rc::new(Instance::new(
-                    RefCell::new(HashMap::new()),
-                    self.clone(),
-                )));
-                Ok(instance)
+                let instance = Rc::new(Instance::new(RefCell::new(HashMap::new()), self.clone()));
+                if let Some(Object::Callable(initializer)) = self.find_method(&String::from("init"))
+                {
+                    initializer
+                        .bind(Rc::clone(&instance))
+                        .call(interpreter, args)?;
+                }
+
+                Ok(Object::Instance(instance))
             }
             Function::NativeFunc { func, .. } => func(interpreter, &args),
             Function::Declared {
                 declaration,
                 closure,
+                is_init,
             } => {
                 let env = Environment::new(Some(Rc::clone(&closure)));
 
-                match &declaration {
-                    Stmt::Function(_, params, body) => {
-                        for i in 0..params.len() {
-                            env.define(params[i].lexeme.to_owned(), args[i].clone());
-                        }
-
-                        match interpreter.execute_block(body, env) {
-                            Err(Error::Return(value)) => Ok(value),
-                            _ => Ok(Object::Nil),
-                        }
+                if let Stmt::Function(_, params, body) = declaration {
+                    for i in 0..params.len() {
+                        env.define(params[i].lexeme.to_owned(), args[i].clone());
                     }
-                    _ => Err(Error::Error(
-                        Token {
-                            tokentype: TokenType::Nil,
-                            lexeme: String::new(),
-                            literal: TokenLiteral::Nil,
-                            line: 0,
-                        },
-                        String::from("unreachable"),
-                    )),
+
+                    if *is_init {
+                        return Ok(closure.get_at(0, String::from("this")));
+                    }
+
+                    match interpreter.execute_block(body, env) {
+                        Err(Error::Return(value)) => {
+                            println!("Error value? {value}");
+                            Ok(value)
+                        }
+                        _ => Ok(Object::Nil),
+                    }
+                } else {
+                    unreachable!()
                 }
             }
         }
@@ -114,7 +114,14 @@ impl Function {
                 }
                 0
             }
-            Function::Class { .. } => 0,
+            Function::Class { .. } => {
+                if let Some(Object::Callable(initializer)) = self.find_method(&String::from("init"))
+                {
+                    initializer.arity()
+                } else {
+                    0
+                }
+            }
         }
     }
 }

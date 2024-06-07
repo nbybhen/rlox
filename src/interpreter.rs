@@ -150,7 +150,7 @@ impl Environment {
         env.clone()
     }
 
-    fn get_at(&self, dist: usize, name: String) -> Object {
+    pub fn get_at(&self, dist: usize, name: String) -> Object {
         self.ancestor(dist)
             .values
             .borrow()
@@ -252,6 +252,7 @@ impl Interpreter {
                 let func: Object = Object::Callable(Rc::new(Function::Declared {
                     declaration: stmt.clone(),
                     closure: Rc::clone(&self.environment),
+                    is_init: false,
                 }));
                 self.environment.define(name.clone().lexeme, func);
             }
@@ -274,6 +275,7 @@ impl Interpreter {
                         let function: Object = Object::Callable(Rc::new(Function::Declared {
                             declaration: method.clone(),
                             closure: Rc::clone(&self.environment),
+                            is_init: name.lexeme.eq(&String::from("init")),
                         }));
                         hash_methods.insert(name.lexeme.clone(), function);
                     }
