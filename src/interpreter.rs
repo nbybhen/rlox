@@ -4,10 +4,10 @@ use crate::{
     token::{Token, TokenLiteral, TokenType},
     App,
 };
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::SystemTime;
+use std::{borrow::Borrow, cell::RefCell};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
@@ -15,89 +15,61 @@ pub enum Object {
     Number(f32),
     Bool(bool),
     // Function class, HashMap<String, Object> fields
-    Instance(Function, HashMap<String, Object>),
-    Callable(Function),
+    Instance(Rc<Instance>),
+    Callable(Rc<Function>),
     Nil,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Instance {
+    fields: RefCell<HashMap<String, Object>>,
+    class: Function,
+}
+
+impl Instance {
+    pub fn new(fields: RefCell<HashMap<String, Object>>, class: Function) -> Self {
+        Self { fields, class }
+    }
+
+    pub fn set(&self, name: Token, value: Object) {
+        self.fields.borrow_mut().insert(name.lexeme, value);
+    }
+
+    pub fn get(&self, name: Token) -> Result<Object, Error> {
+        // Checks if a property value exists, else if a method exists with a matching name.
+        if let Some(field) = self.fields.borrow().get(&name.lexeme) {
+            return Ok(field.clone());
+        } else if let Some(method) = self.class.find_method(&name.lexeme) {
+            if let Object::Callable(func) = method {
+                if let Function::Declared { .. } = Rc::borrow(&func) {
+                    // Rc::new(self.clone()) vs Rc::clone(self) due to no extension function on Rc<Instance>
+                    return Ok(Object::Callable(Rc::new(func.bind(Rc::new(self.clone())))));
+                }
+            }
+        } else {
+            unreachable!()
+        }
+        unreachable!()
+    }
 }
 
 impl std::fmt::Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Object::Instance(func, fields) => {
-                write!(f, "instance {func}, fields: {{")?;
-                for (key, value) in fields.into_iter() {
+            Object::Instance(instance) => {
+                write!(f, "instance {:}, fields: {{", instance.class)?;
+                for (key, value) in instance.fields.borrow().iter() {
                     write!(f, "{} -> {}, ", key, value)?;
                 }
                 write!(f, "}}")?;
                 Ok(())
             }
-            Object::Callable(Function::Declared {
-                declaration,
-                closure,
-            }) => write!(f, "callable {declaration}, closure: ()"),
+            Object::Callable(item) => {
+                write!(f, "callable {item}")
+            }
             Object::Nil => write!(f, "Nil"),
             Object::String(s) => write!(f, "\"{s}\""),
             _ => write!(f, "unformatted (Object)"),
-        }
-    }
-}
-
-impl Object {
-    fn bind(&self, arg: &Object) -> Result<Object, Error> {
-        // This may not work as intended (binding clone of closure)
-        if let Object::Callable(func) = self {
-            match func {
-                Function::Declared {
-                    declaration,
-                    closure,
-                } => {
-                    let env = Environment::new(Some(Rc::clone(closure)));
-                    env.define(String::from("this"), arg.clone());
-                    return Ok(Object::Callable(Function::Declared {
-                        declaration: declaration.clone(),
-                        closure: Rc::new(env),
-                    }));
-                }
-                _ => unreachable!("Calling binding must be on a Function::Declared"),
-            }
-        }
-        //println!("{:?}", arg);
-        unreachable!("Calling binding must be on an Object::Callable.");
-    }
-
-    fn get(&self, name: &Token) -> Result<Object, Error> {
-        println!("");
-        println!("Pre-get: {self}");
-        match self {
-            Object::Instance(class, fields) => {
-                if fields.contains_key(&name.lexeme) {
-                    return fields
-                        .get(&name.lexeme.clone())
-                        .cloned()
-                        .ok_or(Error::Error(
-                            name.clone(),
-                            format!("Undefined property: {:}", name.lexeme),
-                        ));
-                }
-                let method = class.find_method(name.lexeme.clone());
-
-                if method.is_some() {
-                    return method.unwrap().bind(self);
-                }
-
-                unreachable!("Must be a Function::Class instance to access methods")
-            }
-            _ => {
-                unreachable!()
-            }
-        }
-    }
-
-    fn set(&mut self, name: &Token, value: &Object) {
-        if let Object::Instance(func, ref mut fields) = self {
-            if let Function::Class { name: _, .. } = func {
-                fields.insert(name.lexeme.clone(), value.clone());
-            }
         }
     }
 }
@@ -124,7 +96,7 @@ impl Environment {
     }
 
     // Writes a variable into the global environment
-    pub fn define(&self, name: String, value: Object) -> () {
+    pub fn define(&self, name: String, value: Object) {
         self.values.borrow_mut().insert(name, value);
     }
 
@@ -144,11 +116,9 @@ impl Environment {
     }
 
     // Reassigns a variable within the global environment if it exists
-    pub fn assign(&self, name: &Token, value: &Object) -> Result<(), String> {
+    pub fn assign(&self, name: &Token, value: Object) -> Result<(), String> {
         if self.values.borrow().contains_key(&name.lexeme) {
-            self.values
-                .borrow_mut()
-                .insert(name.lexeme.clone(), value.clone());
+            self.values.borrow_mut().insert(name.lexeme.clone(), value);
             return Ok(());
         }
         if self.enclosing.is_some() {
@@ -162,11 +132,11 @@ impl Environment {
         Err(String::from("Undefined variable."))
     }
 
-    pub fn assign_at(&self, dist: usize, name: &Token, value: &Object) {
+    pub fn assign_at(&self, dist: usize, name: &Token, value: Object) {
         self.ancestor(dist)
             .values
             .borrow_mut()
-            .insert(name.lexeme.clone(), value.clone());
+            .insert(name.lexeme.clone(), value);
     }
 
     fn ancestor(&self, dist: usize) -> Environment {
@@ -201,7 +171,7 @@ impl Interpreter {
         let globals = Rc::new(Environment::new(None));
         globals.define(
             String::from("clock"),
-            Object::Callable(Function::NativeFunc {
+            Object::Callable(Rc::new(Function::NativeFunc {
                 name: String::from("clock"),
                 arity: 0,
                 func: |_, _| {
@@ -212,7 +182,7 @@ impl Interpreter {
                             .as_millis() as f32,
                     ))
                 },
-            }),
+            })),
         );
 
         Interpreter {
@@ -279,10 +249,10 @@ impl Interpreter {
                 }
             }
             Stmt::Function(name, _, _) => {
-                let func: Object = Object::Callable(Function::Declared {
+                let func: Object = Object::Callable(Rc::new(Function::Declared {
                     declaration: stmt.clone(),
                     closure: Rc::clone(&self.environment),
-                });
+                }));
                 self.environment.define(name.clone().lexeme, func);
             }
             Stmt::Return(_, value) => {
@@ -301,19 +271,19 @@ impl Interpreter {
                 for method in methods {
                     // This might not work as intended
                     if let Stmt::Function(name, _, _) = method {
-                        let function: Object = Object::Callable(Function::Declared {
+                        let function: Object = Object::Callable(Rc::new(Function::Declared {
                             declaration: method.clone(),
                             closure: Rc::clone(&self.environment),
-                        });
+                        }));
                         hash_methods.insert(name.lexeme.clone(), function);
                     }
                 }
 
-                let class: Object = Object::Callable(Function::Class {
+                let class: Object = Object::Callable(Rc::new(Function::Class {
                     name: name.lexeme.clone(),
                     methods: hash_methods,
-                });
-                let _ = self.environment.assign(name, &class);
+                }));
+                let _ = self.environment.assign(name, class);
             }
         }
         Ok(())
@@ -446,10 +416,11 @@ impl Interpreter {
                 let value: Object = self.evaluate(expr)?;
 
                 if let Some(dist) = self.locals.get(expr) {
-                    self.environment.assign_at(*dist, name, &value);
+                    self.environment.assign_at(*dist, name, value.clone());
+                } else {
+                    let _ = self.environment.assign(name, value.clone());
                 }
 
-                let _ = self.environment.assign(name, &value);
                 Ok(value)
             }
             Expr::Logical {
@@ -507,9 +478,8 @@ impl Interpreter {
             }
             Expr::Get { object, name } => {
                 let object = self.evaluate(object)?;
-                println!("Get object post-eval: {object}");
-                if let Object::Instance(_, _) = object {
-                    return object.get(name);
+                if let Object::Instance(instance) = object {
+                    return instance.get(name.clone());
                 }
 
                 Err(Error::Error(
@@ -524,11 +494,9 @@ impl Interpreter {
             } => {
                 let mut object = self.evaluate(object)?;
 
-                if let Object::Instance(_, _) = object {
+                if let Object::Instance(instance) = &mut object {
                     let value = self.evaluate(value)?;
-                    println!("Pre-set: {object}");
-                    object.set(name, &value);
-                    println!("Post-set: {object}");
+                    instance.set(name.clone(), value.clone());
 
                     Ok(value)
                 } else {

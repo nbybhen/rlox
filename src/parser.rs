@@ -41,11 +41,11 @@ impl std::fmt::Display for Stmt {
             Stmt::If(_, _, _) => write!(f, "unformatted (Stmt::If)"),
             Stmt::While(_, _) => write!(f, "unformatted (Stmt::While)"),
             Stmt::Var(name, initializer) => {
-                write!(f, "var {name} = ");
+                let _ = write!(f, "var {name} = ");
                 if initializer.is_some() {
                     initializer.as_ref().inspect(|x| write!(f, "{x};").unwrap());
                 } else {
-                    write!(f, "null;");
+                    let _ = write!(f, "null;");
                 }
 
                 Ok(())
@@ -777,69 +777,69 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn parenthesize(name: String, exprs: &[&Box<Expr>]) -> String {
-    let mut builder: String = String::from("(");
-    builder.push_str(&name);
+// fn parenthesize(name: String, exprs: &[&Box<Expr>]) -> String {
+//     let mut builder: String = String::from("(");
+//     builder.push_str(&name);
 
-    for expr in exprs {
-        builder.push_str(" ");
-        builder.push_str(&print(expr));
-    }
-    builder.push_str(")");
+//     for expr in exprs {
+//         builder.push_str(" ");
+//         builder.push_str(&print(expr));
+//     }
+//     builder.push_str(")");
 
-    builder
-}
+//     builder
+// }
 
-pub fn print(expr: &Expr) -> String {
-    match expr {
-        Expr::Literal { value } => match value {
-            TokenLiteral::Nil => String::from("Nil"),
-            _ => value.to_string(),
-        },
-        Expr::Unary { operator, right } => parenthesize(operator.lexeme.clone(), &[right]),
-        Expr::Grouping { expression } => parenthesize(String::from("group"), &[expression]),
-        Expr::Binary {
-            left,
-            operator,
-            right,
-        } => parenthesize(operator.lexeme.clone(), &[left, right]),
-        _ => String::new(),
-    }
-}
+// pub fn print(expr: &Expr) -> String {
+//     match expr {
+//         Expr::Literal { value } => match value {
+//             TokenLiteral::Nil => String::from("Nil"),
+//             _ => value.to_string(),
+//         },
+//         Expr::Unary { operator, right } => parenthesize(operator.lexeme.clone(), &[right]),
+//         Expr::Grouping { expression } => parenthesize(String::from("group"), &[expression]),
+//         Expr::Binary {
+//             left,
+//             operator,
+//             right,
+//         } => parenthesize(operator.lexeme.clone(), &[left, right]),
+//         _ => String::new(),
+//     }
+// }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    #[test]
-    fn expression_creation() {
-        let expression = Expr::Binary {
-            left: Box::new(Expr::Unary {
-                operator: Token {
-                    tokentype: TokenType::Minus,
-                    lexeme: String::from("-"),
-                    literal: TokenLiteral::Nil,
-                    line: 0,
-                },
-                right: Box::new(Expr::Literal {
-                    value: TokenLiteral::Number(123.0),
-                }),
-            }),
-            operator: Token {
-                tokentype: TokenType::Star,
-                lexeme: String::from("*"),
-                literal: TokenLiteral::Nil,
-                line: 0,
-            },
-            right: Box::new(Expr::Grouping {
-                expression: Box::new(Expr::Literal {
-                    value: TokenLiteral::Number(45.67),
-                }),
-            }),
-        };
-        assert_eq!(
-            print(&expression),
-            String::from("(* (- 123) (group 45.67))")
-        );
-    }
-}
+//     #[test]
+//     fn expression_creation() {
+//         let expression = Expr::Binary {
+//             left: Box::new(Expr::Unary {
+//                 operator: Token {
+//                     tokentype: TokenType::Minus,
+//                     lexeme: String::from("-"),
+//                     literal: TokenLiteral::Nil,
+//                     line: 0,
+//                 },
+//                 right: Box::new(Expr::Literal {
+//                     value: TokenLiteral::Number(123.0),
+//                 }),
+//             }),
+//             operator: Token {
+//                 tokentype: TokenType::Star,
+//                 lexeme: String::from("*"),
+//                 literal: TokenLiteral::Nil,
+//                 line: 0,
+//             },
+//             right: Box::new(Expr::Grouping {
+//                 expression: Box::new(Expr::Literal {
+//                     value: TokenLiteral::Number(45.67),
+//                 }),
+//             }),
+//         };
+//         assert_eq!(
+//             print(&expression),
+//             String::from("(* (- 123) (group 45.67))")
+//         );
+//     }
+//}

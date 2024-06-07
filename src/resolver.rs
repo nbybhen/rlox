@@ -8,15 +8,20 @@ use crate::{
     App,
 };
 
-#[allow(dead_code)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ClassType {
+    None,
+    Class,
+}
+
 pub struct Resolver<'a> {
     interpreter: &'a mut Interpreter,
     scopes: Vec<HashMap<String, bool>>,
     app: &'a App,
     current_function: FunctionType,
+    current_class: ClassType,
 }
 
-#[allow(dead_code)]
 impl<'a> Resolver<'a> {
     pub fn new(interpreter: &'a mut Interpreter, app: &'a App) -> Resolver<'a> {
         Resolver {
@@ -24,6 +29,7 @@ impl<'a> Resolver<'a> {
             scopes: Vec::new(),
             app,
             current_function: FunctionType::None,
+            current_class: ClassType::None,
         }
     }
 
@@ -145,6 +151,9 @@ impl<'a> Resolver<'a> {
                 self.resolve_stmt(body);
             }
             Stmt::Class(name, methods) => {
+                let enclosing_class = self.current_class;
+                self.current_class = ClassType::Class;
+
                 self.declare(name);
                 self.define(name);
 
@@ -159,13 +168,21 @@ impl<'a> Resolver<'a> {
                 }
 
                 self.end_scope();
+
+                self.current_class = enclosing_class;
             }
         }
     }
 
     fn resolve_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::This { keyword } => self.resolve_local(expr, keyword),
+            Expr::This { keyword } => {
+                if self.current_class == ClassType::None {
+                    self.app
+                        .error_token(keyword.clone(), "Can't use 'this' outside of a class.");
+                }
+                self.resolve_local(expr, keyword);
+            }
             Expr::Variable { name } => {
                 if !self.scopes.is_empty()
                     && self.scopes.last().unwrap().get(&name.lexeme).copied() == Some(false)
@@ -183,18 +200,12 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(expr);
                 self.resolve_local(expr, name);
             }
-            Expr::Binary {
-                left,
-                operator: _,
-                right,
-            } => {
+            Expr::Binary { left, right, .. } => {
                 self.resolve_expr(left);
                 self.resolve_expr(right);
             }
             Expr::Call {
-                callee,
-                paren: _,
-                arguments,
+                callee, arguments, ..
             } => {
                 self.resolve_expr(callee);
 
@@ -205,37 +216,19 @@ impl<'a> Resolver<'a> {
             Expr::Grouping { expression } => {
                 self.resolve_expr(expression);
             }
-            Expr::Logical {
-                left,
-                operator: _,
-                right,
-            } => {
+            Expr::Logical { left, right, .. } => {
                 self.resolve_expr(left);
                 self.resolve_expr(right);
             }
-            Expr::Unary { operator: _, right } => {
+            Expr::Unary { right, .. } => {
                 self.resolve_expr(right);
             }
-            Expr::Literal { value: _ } => {}
+            Expr::Literal { .. } => {}
             Expr::Get { object, name: _ } => self.resolve_expr(object),
-            Expr::Set {
-                object,
-                name: _,
-                value,
-            } => {
+            Expr::Set { object, value, .. } => {
                 self.resolve_expr(value);
                 self.resolve_expr(object);
             }
         }
     }
-
-    // fn decide(&mut self, stmt: &Stmt) {
-    //     match stmt {
-    //         Stmt::Block(stmts) => {
-    //             self.begin_scope();
-    //         }
-    //         _ => {}
-    //     }
-    //     self.begin_scope();
-    // }
 }

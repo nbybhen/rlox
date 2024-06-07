@@ -1,6 +1,7 @@
-use crate::interpreter::{Environment, Error, Interpreter, Object};
+use crate::interpreter::{Environment, Error, Instance, Interpreter, Object};
 use crate::parser::Stmt;
 use crate::token::{Token, TokenLiteral, TokenType};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -29,7 +30,23 @@ pub enum Function {
 }
 
 impl Function {
-    pub fn find_method(&self, name: String) -> Option<Object> {
+    pub fn bind(&self, instance: Rc<Instance>) -> Self {
+        if let Function::Declared {
+            declaration,
+            closure,
+        } = self
+        {
+            let env = Environment::new(Some(Rc::clone(closure)));
+            env.define(String::from("this"), Object::Instance(instance));
+            return Function::Declared {
+                declaration: declaration.clone(),
+                closure: Rc::new(env),
+            };
+        } else {
+            unreachable!()
+        }
+    }
+    pub fn find_method(&self, name: &String) -> Option<Object> {
         match self {
             Function::Class { methods, .. } => {
                 // println!("Methods: ");
@@ -37,8 +54,8 @@ impl Function {
                 //     println!("{} -> {}, ", key, value);
                 // }
                 //println!("Method Name: {name}");
-                if methods.contains_key(&name) {
-                    return methods.get(&name).cloned();
+                if methods.contains_key(name) {
+                    return methods.get(name).cloned();
                 }
                 //println!("Couldn't find method: {name}");
                 None
@@ -51,14 +68,13 @@ impl Function {
         match self {
             Function::Class { .. } => {
                 // Might cause issues down the line
-                let instance = Object::Instance(self.clone(), HashMap::new());
+                let instance = Object::Instance(Rc::new(Instance::new(
+                    RefCell::new(HashMap::new()),
+                    self.clone(),
+                )));
                 Ok(instance)
             }
-            Function::NativeFunc {
-                name: _,
-                arity: _,
-                func,
-            } => func(interpreter, &args),
+            Function::NativeFunc { func, .. } => func(interpreter, &args),
             Function::Declared {
                 declaration,
                 closure,
@@ -91,21 +107,14 @@ impl Function {
     }
     pub fn arity(&self) -> usize {
         match self {
-            Function::NativeFunc {
-                name: _,
-                arity,
-                func: _,
-            } => *arity,
-            Function::Declared {
-                declaration,
-                closure: _,
-            } => {
+            Function::NativeFunc { arity, .. } => *arity,
+            Function::Declared { declaration, .. } => {
                 if let Stmt::Function(_, params, _) = declaration {
                     return params.len();
                 }
                 0
             }
-            Function::Class { name: _, .. } => 0,
+            Function::Class { .. } => 0,
         }
     }
 }
@@ -113,22 +122,15 @@ impl Function {
 impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Function::NativeFunc {
-                name,
-                arity: _,
-                func: _,
-            } => write!(f, "<native fn {name}>"),
-            Function::Declared {
-                declaration: _,
-                closure: _,
-            } => write!(f, "<fn lox>"),
+            Function::NativeFunc { name, .. } => write!(f, "<native fn {name}>"),
+            Function::Declared { declaration, .. } => write!(f, "<fn {declaration}, closure: ()>"),
             Function::Class { name, methods } => {
-                write!(f, "{name}, Methods: [");
+                let _ = write!(f, "{name}, Methods: [");
 
                 for (key, value) in methods.into_iter() {
-                    write!(f, "{} -> {}, ", key, value);
+                    let _ = write!(f, "{} -> {}, ", key, value);
                 }
-                write!(f, "]");
+                let _ = write!(f, "]");
                 Ok(())
             }
         }
