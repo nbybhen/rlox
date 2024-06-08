@@ -1,5 +1,27 @@
-class Foo {
-  init() {
-    return;
+class Person {
+    init(name) {
+        this.name = name;
+        print "Set this.name to name!";
+    }
+
+    introduction() {
+        print "Hello! My name is ";
+    }
+}
+
+class Dog {
+  init(name, owner) {
+    this.name = name;
+    this.owner = owner;
+  }
+
+  bark() {
+    print "WOOF";
   }
 }
+
+var owner = Person("Henock");
+owner.introduction();
+
+var pet = Dog("Sparky", owner);
+pet.bark();

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    functions::FunctionType,
+    function::FunctionType,
     interpreter::Interpreter,
     parser::{Expr, Stmt},
     token::Token,

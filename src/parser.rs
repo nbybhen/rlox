@@ -24,10 +24,10 @@ pub enum Stmt {
 impl std::fmt::Display for Stmt {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Stmt::Expression(_) => write!(f, "unformatted (Stmt::Expression)"),
+            Stmt::Expression(expr) => write!(f, "Expression: {expr}"),
             Stmt::Block(_) => write!(f, "unformatted (Stmt::Block)"),
             Stmt::Class(_, _) => write!(f, "unformatted (Stmt::Class)"),
-            Stmt::Print(expr) => write!(f, "print \"{expr}\""),
+            Stmt::Print(expr) => write!(f, "print \"{expr}\";"),
             Stmt::Return(_, _) => write!(f, "unformatted (Stmt::Return)"),
             Stmt::Function(name, args, body) => {
                 write!(f, "function {name}({args:?}) {{\n")?;

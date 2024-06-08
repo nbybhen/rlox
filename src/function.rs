@@ -1,4 +1,5 @@
-use crate::interpreter::{Environment, Error, Instance, Interpreter, Object};
+use crate::environment::Environment;
+use crate::interpreter::{Error, Instance, Interpreter, Object};
 use crate::parser::Stmt;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -32,6 +33,7 @@ pub enum Function {
 
 impl Function {
     pub fn bind(&self, instance: Rc<Instance>) -> Self {
+        println!("Before binding: {self}\n");
         if let Function::Declared {
             declaration,
             closure,
@@ -40,11 +42,13 @@ impl Function {
         {
             let env = Environment::new(Some(Rc::clone(closure)));
             env.define(String::from("this"), Object::Instance(instance));
-            return Function::Declared {
+            let temp = Function::Declared {
                 declaration: declaration.clone(),
                 closure: Rc::new(env),
                 is_init: *is_init,
             };
+            println!("After Binding: {temp}\n");
+            return temp;
         } else {
             unreachable!()
         }
@@ -68,6 +72,7 @@ impl Function {
                 let instance = Rc::new(Instance::new(RefCell::new(HashMap::new()), self.clone()));
                 if let Some(Object::Callable(initializer)) = self.find_method(&String::from("init"))
                 {
+                    println!("RUNNING INIT");
                     initializer
                         .bind(Rc::clone(&instance))
                         .call(interpreter, args)?;
@@ -130,12 +135,21 @@ impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Function::NativeFunc { name, .. } => write!(f, "<native fn {name}>"),
-            Function::Declared { declaration, .. } => write!(f, "<fn {declaration}, closure: ()>"),
+            Function::Declared {
+                declaration,
+                closure,
+                is_init,
+            } => {
+                write!(
+                    f,
+                    "<fn {declaration}, closure: {closure}, is_init: {is_init}>\n"
+                )
+            }
             Function::Class { name, methods } => {
                 let _ = write!(f, "{name}, Methods: [");
 
                 for (key, value) in methods.into_iter() {
-                    let _ = write!(f, "{} -> {}, ", key, value);
+                    let _ = write!(f, "{} -> {},", key, value);
                 }
                 let _ = write!(f, "]");
                 Ok(())

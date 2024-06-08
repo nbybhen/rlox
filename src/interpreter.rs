@@ -1,5 +1,6 @@
 use crate::{
-    functions::Function,
+    environment::Environment,
+    function::Function,
     parser::{Expr, Stmt},
     token::{Token, TokenLiteral, TokenType},
     App,
@@ -18,39 +19,6 @@ pub enum Object {
     Instance(Rc<Instance>),
     Callable(Rc<Function>),
     Nil,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct Instance {
-    fields: RefCell<HashMap<String, Object>>,
-    class: Function,
-}
-
-impl Instance {
-    pub fn new(fields: RefCell<HashMap<String, Object>>, class: Function) -> Self {
-        Self { fields, class }
-    }
-
-    pub fn set(&self, name: Token, value: Object) {
-        self.fields.borrow_mut().insert(name.lexeme, value);
-    }
-
-    pub fn get(&self, name: Token) -> Result<Object, Error> {
-        // Checks if a property value exists, else if a method exists with a matching name.
-        if let Some(field) = self.fields.borrow().get(&name.lexeme) {
-            return Ok(field.clone());
-        } else if let Some(method) = self.class.find_method(&name.lexeme) {
-            if let Object::Callable(func) = method {
-                if let Function::Declared { .. } = Rc::borrow(&func) {
-                    // Rc::new(self.clone()) vs Rc::clone(self) due to no extension function on Rc<Instance>
-                    return Ok(Object::Callable(Rc::new(func.bind(Rc::new(self.clone())))));
-                }
-            }
-        } else {
-            unreachable!()
-        }
-        unreachable!()
-    }
 }
 
 impl std::fmt::Display for Object {
@@ -75,89 +43,53 @@ impl std::fmt::Display for Object {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct Instance {
+    fields: RefCell<HashMap<String, Object>>,
+    class: Function,
+}
+
+impl std::fmt::Display for Instance {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Instance {} fields: {:?}", self.class, self.fields)
+    }
+}
+
+impl Instance {
+    pub fn new(fields: RefCell<HashMap<String, Object>>, class: Function) -> Self {
+        Self { fields, class }
+    }
+
+    pub fn set(&self, name: Token, value: Object) {
+        self.fields.borrow_mut().insert(name.lexeme, value);
+    }
+
+    pub fn get(&self, name: Token) -> Result<Object, Error> {
+        println!("Self: {}\n Looking for: {name}\n", self);
+        // Checks if a property value exists, else if a method exists with a matching name.
+        if let Some(field) = self.fields.borrow().get(&name.lexeme) {
+            return Ok(field.clone());
+        } else if let Some(method) = self.class.find_method(&name.lexeme) {
+            if let Object::Callable(func) = method {
+                if let Function::Declared { .. } = Rc::borrow(&func) {
+                    // Rc::new(self.clone()) vs Rc::clone(self) due to no extension function on Rc<Instance>
+                    return Ok(Object::Callable(Rc::new(func.bind(Rc::new(self.clone())))));
+                } else {
+                    unreachable!();
+                }
+            } else {
+                unreachable!();
+            }
+        } else {
+            unreachable!()
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Error {
     //Break,
     Return(Object),
     Error(Token, String),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Environment {
-    values: RefCell<HashMap<String, Object>>,
-    enclosing: Option<Rc<Environment>>,
-}
-
-impl Environment {
-    pub fn new(env: Option<Rc<Environment>>) -> Environment {
-        Environment {
-            values: RefCell::new(HashMap::new()),
-            enclosing: env,
-        }
-    }
-
-    // Writes a variable into the global environment
-    pub fn define(&self, name: String, value: Object) {
-        self.values.borrow_mut().insert(name, value);
-    }
-
-    // Gets a variable from the global environment
-    pub fn get(&self, name: Token) -> Result<Object, Error> {
-        if self.values.borrow().contains_key(&name.lexeme) {
-            return Ok(self.values.borrow().get(&name.lexeme).unwrap().clone());
-        }
-        if self.enclosing.is_some() {
-            return self.enclosing.as_ref().unwrap().get(name);
-        }
-
-        Err(Error::Error(
-            name.clone(),
-            format!("Undefined variable: {name}"),
-        ))
-    }
-
-    // Reassigns a variable within the global environment if it exists
-    pub fn assign(&self, name: &Token, value: Object) -> Result<(), String> {
-        if self.values.borrow().contains_key(&name.lexeme) {
-            self.values.borrow_mut().insert(name.lexeme.clone(), value);
-            return Ok(());
-        }
-        if self.enclosing.is_some() {
-            return self
-                .enclosing
-                .as_ref()
-                .expect("Enclosing was wrong type")
-                .assign(name, value);
-        }
-
-        Err(String::from("Undefined variable."))
-    }
-
-    pub fn assign_at(&self, dist: usize, name: &Token, value: Object) {
-        self.ancestor(dist)
-            .values
-            .borrow_mut()
-            .insert(name.lexeme.clone(), value);
-    }
-
-    fn ancestor(&self, dist: usize) -> Environment {
-        let mut env = self;
-        for _ in 0..dist {
-            if let Some(inner) = env.enclosing.as_ref() {
-                env = inner;
-            }
-        }
-
-        env.clone()
-    }
-
-    pub fn get_at(&self, dist: usize, name: String) -> Object {
-        self.ancestor(dist)
-            .values
-            .borrow()
-            .get(&name)
-            .unwrap()
-            .clone()
-    }
 }
 
 pub struct Interpreter {
@@ -220,7 +152,7 @@ impl Interpreter {
                 println!("{:?}", self.evaluate(e)?);
             }
             Stmt::Expression(e) => {
-                let _ = self.evaluate(e)?;
+                self.evaluate(e)?;
             }
             Stmt::Var(n, v) => {
                 if let Some(expr) = v {
@@ -464,7 +396,7 @@ impl Interpreter {
                         return Err(Error::Error(
                             paren.clone(),
                             format!(
-                                "Expected {} arguments but got {}.",
+                                "Expected {} argument(s) but got {}.",
                                 function.arity(),
                                 arguments.len()
                             ),
@@ -498,6 +430,7 @@ impl Interpreter {
 
                 if let Object::Instance(instance) = &mut object {
                     let value = self.evaluate(value)?;
+
                     instance.set(name.clone(), value.clone());
 
                     Ok(value)

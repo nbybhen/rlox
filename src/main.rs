@@ -6,7 +6,8 @@ use std::fs;
 use std::io;
 use std::io::Write;
 
-mod functions;
+mod environment;
+mod function;
 mod interpreter;
 mod parser;
 mod resolver;
