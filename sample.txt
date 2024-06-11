@@ -1,39 +1,14 @@
-class Person {
-    init(name) {
-        this.name = name;
-    }
-
-    introduction() {
-        print "Hello! My name is " + this.name;
-    }
-}
-
-class Dog {
-  init(name, owner) {
-    this.name = name;
-    this.owner = owner;
-  }
-
-  newOwner(owner) {
-    print "Making new owner into " + owner.name;
-    this.owner = owner;
-  }
-
-  status() {
-    print "My owner is " + this.owner.name;
-  }
-
-  bark() {
-    print "WOOF";
+class Doughnut {
+  cook() {
+    print "Fry until golden brown.";
   }
 }
 
-var owner = Person("Henock");
-owner.introduction();
+class BostonCream < Doughnut {
+  cook() {
+    super.cook();
+    print "Pipe full of custard and coat with chocolate.";
+  }
+}
 
-var pet = Dog("Sparky", owner);
-pet.bark();
-pet.status();
-
-pet.newOwner(Person("Jaran"));
-pet.status();
+BostonCream().cook();

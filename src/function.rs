@@ -27,12 +27,14 @@ pub enum Function {
     },
     Class {
         name: String,
+        superclass: Option<Object>,
         methods: HashMap<String, Object>,
     },
 }
 
 impl Function {
     pub fn bind(&self, instance: Rc<Instance>) -> Self {
+        // println!("Self: {}", self);
         if let Function::Declared {
             declaration,
             closure,
@@ -47,14 +49,24 @@ impl Function {
                 is_init: *is_init,
             };
         } else {
-            unreachable!()
+            unreachable!("Must be a declared function to BIND");
         }
     }
     pub fn find_method(&self, name: &String) -> Option<Object> {
         match self {
-            Function::Class { methods, .. } => {
+            Function::Class {
+                methods,
+                superclass,
+                ..
+            } => {
                 if methods.contains_key(name) {
                     return methods.get(name).cloned();
+                }
+
+                if let Some(superclass) = superclass {
+                    if let Object::Callable(class) = superclass {
+                        return class.find_method(name);
+                    }
                 }
                 None
             }
@@ -140,13 +152,17 @@ impl std::fmt::Display for Function {
                     "<fn {declaration}, closure: {closure}, is_init: {is_init}>\n"
                 )
             }
-            Function::Class { name, methods } => {
-                let _ = write!(f, "{name}, Methods: [");
+            Function::Class {
+                name,
+                superclass: _,
+                methods,
+            } => {
+                let _ = write!(f, "<class {name}, Methods: [");
 
                 for (key, value) in methods.into_iter() {
                     let _ = write!(f, "{} -> {},", key, value);
                 }
-                let _ = write!(f, "]");
+                let _ = write!(f, "]>");
                 Ok(())
             }
         }

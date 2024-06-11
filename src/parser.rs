@@ -17,8 +17,8 @@ pub enum Stmt {
     Function(Token, Vec<Token>, Vec<Stmt>),
     // Token keyword, Expr value
     Return(Token, Option<Expr>),
-    // Token name, Vec<Stmt> methods
-    Class(Token, Vec<Stmt>),
+    // Token name, Option<Expr> superclass,  Vec<Stmt> methods
+    Class(Token, Option<Expr>, Vec<Stmt>),
 }
 
 impl std::fmt::Display for Stmt {
@@ -26,7 +26,7 @@ impl std::fmt::Display for Stmt {
         match self {
             Stmt::Expression(expr) => write!(f, "Expression: {expr}"),
             Stmt::Block(_) => write!(f, "unformatted (Stmt::Block)"),
-            Stmt::Class(_, _) => write!(f, "unformatted (Stmt::Class)"),
+            Stmt::Class(_, _, _) => write!(f, "unformatted (Stmt::Class)"),
             Stmt::Print(expr) => write!(f, "print \"{expr}\";"),
             Stmt::Return(_, _) => write!(f, "unformatted (Stmt::Return)"),
             Stmt::Function(name, args, body) => {
@@ -100,6 +100,10 @@ pub enum Expr {
     This {
         keyword: Token,
     },
+    Super {
+        keyword: Token,
+        method: Token,
+    },
 }
 
 impl std::fmt::Display for Expr {
@@ -132,6 +136,7 @@ impl std::fmt::Display for Expr {
                 value,
             } => write!(f, "set {object}.{name} = {value}"),
             Expr::This { keyword } => write!(f, "{keyword}"),
+            Expr::Super { keyword, method } => write!(f, "super {keyword}.{method}"),
         }
     }
 }
@@ -181,14 +186,25 @@ impl<'a> Parser<'a> {
         declaration
     }
 
-    // classDecl -> "class" IDENTIFIER "{" function* "}" ;
+    // classDecl -> "class" IDENTIFIER ( "<" IDENTIFIER )? "{" function* "}" ;
     fn class_declaration(&mut self) -> Option<Stmt> {
         let name = self
-            .consume(TokenType::Identifier, String::from("Expected class name"))
+            .consume(TokenType::Identifier, String::from("Expected class name."))
             .unwrap();
+
+        let mut superclass: Option<Expr> = None;
+        if self.match_one_of(&[TokenType::Less]) {
+            let _ = self.consume(
+                TokenType::Identifier,
+                String::from("Expected superclass name."),
+            );
+            superclass = Some(Expr::Variable {
+                name: self.previous(),
+            });
+        }
         let _ = self.consume(
             TokenType::LeftBrace,
-            String::from("Expected \'{\' before class body"),
+            String::from("Expected \'{\' before class body."),
         );
 
         let mut methods: Vec<Stmt> = vec![];
@@ -201,7 +217,7 @@ impl<'a> Parser<'a> {
             String::from("Expected \'}\' after class declaration"),
         );
 
-        Some(Stmt::Class(name, methods))
+        Some(Stmt::Class(name, superclass, methods))
     }
 
     // varDecl -> "var" IDENTIFIER ( "=" expression )? ";"
@@ -619,7 +635,7 @@ impl<'a> Parser<'a> {
         Some(expr)
     }
 
-    // primary -> NUMBER | STRING | true | false | nil | "(" expression ")"
+    // primary -> NUMBER | STRING | true | false | nil | "(" expression ")" | "this" | IDENTIFIER | "super" "." IDENTIFIER
     fn primary(&mut self) -> Option<Expr> {
         if self.match_one_of(&[TokenType::False]) {
             return Some(Expr::Literal {
@@ -665,6 +681,19 @@ impl<'a> Parser<'a> {
                 keyword: self.previous(),
             });
         }
+
+        if self.match_one_of(&[TokenType::Super]) {
+            let keyword: Token = self.previous();
+            let _ = self.consume(TokenType::Dot, String::from("Expect '.' after 'super'."));
+            let method: Token = self
+                .consume(
+                    TokenType::Identifier,
+                    String::from("Expect superclass method name"),
+                )
+                .unwrap();
+            return Some(Expr::Super { keyword, method });
+        }
+
         self.app.error_token(self.peek(), "Expected expression.");
 
         None

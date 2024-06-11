@@ -5,10 +5,10 @@ use crate::{
     token::{Token, TokenLiteral, TokenType},
     App,
 };
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::SystemTime;
 use std::{borrow::Borrow, cell::RefCell};
+use std::{collections::HashMap, fmt::Debug};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
@@ -222,8 +222,35 @@ impl Interpreter {
 
                 return Err(Error::Return(ret));
             }
-            Stmt::Class(name, methods) => {
+            Stmt::Class(name, superclass, methods) => {
+                let mut eval_superclass: Option<Object> = None;
+
+                if let Some(superclass) = superclass {
+                    eval_superclass = Some(self.evaluate(superclass)?);
+                    match &eval_superclass {
+                        Some(Object::Callable(func)) => {
+                            if let Function::Class { .. } = **func {
+                            } else {
+                                return Err(Error::Error(
+                                    name.clone(),
+                                    String::from("Superclass must be a class"),
+                                ));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
                 self.environment.define(name.lexeme.clone(), Object::Nil);
+
+                // let prev_env = self.environment.clone();
+
+                if superclass.is_some() {
+                    self.environment =
+                        Rc::new(Environment::new(Some(Rc::clone(&self.environment))));
+                    self.environment
+                        .define(String::from("super"), eval_superclass.clone().unwrap())
+                }
 
                 let mut hash_methods: HashMap<String, Object> = HashMap::new();
 
@@ -241,8 +268,16 @@ impl Interpreter {
 
                 let class: Object = Object::Callable(Rc::new(Function::Class {
                     name: name.lexeme.clone(),
+                    superclass: eval_superclass,
                     methods: hash_methods,
                 }));
+
+                //
+                if superclass.is_some() {
+                    // self.environment = prev_env;
+                    self.environment = Rc::clone(&self.environment.enclosing.clone().unwrap());
+                }
+
                 let _ = self.environment.assign(name, class);
             }
         }
@@ -469,6 +504,32 @@ impl Interpreter {
                 }
             }
             Expr::This { keyword } => self.lookup_variable(keyword, expr),
+            Expr::Super { method, .. } => {
+                let dist = self.locals.get(expr).expect("Unable to calculate dist.");
+
+                // LoxClass = Object::Callable?
+                let superclass = self.environment.get_at(*dist, String::from("super"));
+
+                // LoxInstance = Object::Instance(Rc<Instance>)
+                let object = self.environment.get_at(dist - 1, String::from("this"));
+
+                if let Object::Callable(class) = superclass {
+                    let eval_method = class.find_method(&method.lexeme);
+
+                    if eval_method.is_none() {
+                        return Err(Error::Error(
+                            method.clone(),
+                            format!("Undefined property {}.", method.lexeme),
+                        ));
+                    }
+                    if let Object::Instance(instance) = object {
+                        if let Some(Object::Callable(func)) = eval_method {
+                            return Ok(Object::Callable(Rc::new(func.bind(instance))));
+                        }
+                    }
+                }
+                Ok(Object::Nil)
+            }
         }
     }
 

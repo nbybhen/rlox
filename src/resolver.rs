@@ -12,6 +12,7 @@ use crate::{
 pub enum ClassType {
     None,
     Class,
+    Subclass,
 }
 
 pub struct Resolver<'a> {
@@ -156,12 +157,31 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(condition);
                 self.resolve_stmt(body);
             }
-            Stmt::Class(name, methods) => {
+            Stmt::Class(name, superclass, methods) => {
                 let enclosing_class = self.current_class;
                 self.current_class = ClassType::Class;
 
                 self.declare(name);
                 self.define(name);
+
+                if let Some(superclass) = superclass {
+                    if let Expr::Variable {
+                        name: superclass_name,
+                    } = superclass
+                    {
+                        if name.lexeme == superclass_name.lexeme {
+                            self.app
+                                .error_token(name.clone(), "A class can't inherit itself.");
+                        }
+                        self.current_class = ClassType::Subclass;
+                        self.resolve_expr(superclass);
+                    }
+                    self.begin_scope();
+                    self.scopes
+                        .last_mut()
+                        .unwrap()
+                        .insert(String::from("super"), true);
+                }
 
                 self.begin_scope();
                 self.scopes
@@ -181,6 +201,10 @@ impl<'a> Resolver<'a> {
 
                 self.end_scope();
 
+                if superclass.is_some() {
+                    self.end_scope();
+                }
+
                 self.current_class = enclosing_class;
             }
         }
@@ -188,6 +212,15 @@ impl<'a> Resolver<'a> {
 
     fn resolve_expr(&mut self, expr: &Expr) {
         match expr {
+            Expr::Super { keyword, .. } => match self.current_class {
+                ClassType::None => self
+                    .app
+                    .error_token(keyword.clone(), "Can't use 'super' outside of a class."),
+                ClassType::Class => self
+                    .app
+                    .error_token(keyword.clone(), "Can't use 'super' outside of a subclass."),
+                ClassType::Subclass => self.resolve_local(expr, keyword),
+            },
             Expr::This { keyword } => {
                 if self.current_class == ClassType::None {
                     self.app

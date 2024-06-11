@@ -7,8 +7,8 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
-    values: RefCell<HashMap<String, Object>>,
-    enclosing: Option<Rc<Environment>>,
+    pub values: RefCell<HashMap<String, Object>>,
+    pub enclosing: Option<Rc<Environment>>,
 }
 
 impl std::fmt::Display for Environment {
@@ -17,8 +17,8 @@ impl std::fmt::Display for Environment {
             write!(f, "Environment values: (), enclosing: ()",)
         } else {
             write!(f, "Environment values: ")?;
-            for (key, value) in self.values.borrow().iter() {
-                let _ = write!(f, "{} -> (), ", key);
+            for (key, _) in self.values.borrow().iter() {
+                let _ = write!(f, "{} -> <value>, ", key);
             }
             Ok(())
         }
