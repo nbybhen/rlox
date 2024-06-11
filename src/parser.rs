@@ -125,12 +125,12 @@ impl std::fmt::Display for Expr {
                 paren,
                 arguments,
             } => write!(f, "{callee} {paren} ({arguments:?})"),
-            Expr::Get { object, name } => write!(f, "get {object}.{name}"),
+            Expr::Get { object, name } => write!(f, "(get {object}.{name})"),
             Expr::Set {
                 object,
                 name,
                 value,
-            } => write!(f, "set {object} {name} {value}"),
+            } => write!(f, "set {object}.{name} = {value}"),
             Expr::This { keyword } => write!(f, "{keyword}"),
         }
     }

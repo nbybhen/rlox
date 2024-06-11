@@ -25,15 +25,16 @@ impl std::fmt::Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Object::Instance(instance) => {
-                write!(f, "instance {:}, fields: {{", instance.class)?;
+                // write!(f, "instance");
+                write!(f, "instance, fields: {{")?;
                 for (key, value) in instance.fields.borrow().iter() {
                     write!(f, "{} -> {}, ", key, value)?;
                 }
                 write!(f, "}}")?;
                 Ok(())
             }
-            Object::Callable(item) => {
-                write!(f, "callable {item}")
+            Object::Callable(_) => {
+                write!(f, "<callable>")
             }
             Object::Nil => write!(f, "Nil"),
             Object::String(s) => write!(f, "\"{s}\""),
@@ -42,7 +43,7 @@ impl std::fmt::Display for Object {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub struct Instance {
     fields: RefCell<HashMap<String, Object>>,
     class: Function,
@@ -63,8 +64,7 @@ impl Instance {
         self.fields.borrow_mut().insert(name.lexeme, value);
     }
 
-    pub fn get(&self, name: Token) -> Result<Object, Error> {
-        println!("Self: {}\n Looking for: {name}\n", self);
+    pub fn get(&self, name: Token, instance: Rc<Instance>) -> Result<Object, Error> {
         // Checks if a property value exists, else if a method exists with a matching name.
         if let Some(field) = self.fields.borrow().get(&name.lexeme) {
             return Ok(field.clone());
@@ -72,7 +72,7 @@ impl Instance {
             if let Object::Callable(func) = method {
                 if let Function::Declared { .. } = Rc::borrow(&func) {
                     // Rc::new(self.clone()) vs Rc::clone(self) due to no extension function on Rc<Instance>
-                    return Ok(Object::Callable(Rc::new(func.bind(Rc::new(self.clone())))));
+                    return Ok(Object::Callable(Rc::new(func.bind(instance))));
                 } else {
                     unreachable!();
                 }
@@ -84,6 +84,32 @@ impl Instance {
         }
     }
 }
+
+// trait InstanceGet {
+//     fn get(&self, name: Token) -> Result<Object, Error>;
+// }
+
+// impl InstanceGet for Rc<Instance> {
+//     fn get(&self, name: Token) -> Result<Object, Error> {
+//         // Checks if a property value exists, else if a method exists with a matching name.
+//         if let Some(field) = self.fields.borrow().get(&name.lexeme) {
+//             return Ok(field.clone());
+//         } else if let Some(method) = self.class.find_method(&name.lexeme) {
+//             if let Object::Callable(func) = method {
+//                 if let Function::Declared { .. } = Rc::borrow(&func) {
+//                     // Rc::new(self.clone()) vs Rc::clone(self) due to no extension function on Rc<Instance>
+//                     return Ok(Object::Callable(Rc::new(func.bind(self.clone()))));
+//                 } else {
+//                     unreachable!();
+//                 }
+//             } else {
+//                 unreachable!();
+//             }
+//         } else {
+//             unreachable!()
+//         }
+//     }
+// }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Error {
@@ -388,7 +414,8 @@ impl Interpreter {
                 let mut eval_args: Vec<Object> = Vec::new();
 
                 for argument in arguments {
-                    eval_args.push(self.evaluate(argument)?)
+                    let arg = self.evaluate(argument)?;
+                    eval_args.push(arg);
                 }
 
                 if let Object::Callable(function) = callee.clone() {
@@ -411,9 +438,11 @@ impl Interpreter {
                 }
             }
             Expr::Get { object, name } => {
+                //println!("DEBUG {}", expr);
                 let object = self.evaluate(object)?;
                 if let Object::Instance(instance) = object {
-                    return instance.get(name.clone());
+                    let ret = instance.get(name.clone(), Rc::clone(&instance));
+                    return ret;
                 }
 
                 Err(Error::Error(
@@ -426,11 +455,11 @@ impl Interpreter {
                 name,
                 value,
             } => {
+                //println!("DEBUG {}", expr);
                 let mut object = self.evaluate(object)?;
 
                 if let Object::Instance(instance) = &mut object {
                     let value = self.evaluate(value)?;
-
                     instance.set(name.clone(), value.clone());
 
                     Ok(value)

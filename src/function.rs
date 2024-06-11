@@ -33,7 +33,6 @@ pub enum Function {
 
 impl Function {
     pub fn bind(&self, instance: Rc<Instance>) -> Self {
-        println!("Before binding: {self}\n");
         if let Function::Declared {
             declaration,
             closure,
@@ -42,13 +41,11 @@ impl Function {
         {
             let env = Environment::new(Some(Rc::clone(closure)));
             env.define(String::from("this"), Object::Instance(instance));
-            let temp = Function::Declared {
+            return Function::Declared {
                 declaration: declaration.clone(),
                 closure: Rc::new(env),
                 is_init: *is_init,
             };
-            println!("After Binding: {temp}\n");
-            return temp;
         } else {
             unreachable!()
         }
@@ -72,7 +69,6 @@ impl Function {
                 let instance = Rc::new(Instance::new(RefCell::new(HashMap::new()), self.clone()));
                 if let Some(Object::Callable(initializer)) = self.find_method(&String::from("init"))
                 {
-                    println!("RUNNING INIT");
                     initializer
                         .bind(Rc::clone(&instance))
                         .call(interpreter, args)?;
@@ -93,17 +89,16 @@ impl Function {
                         env.define(params[i].lexeme.to_owned(), args[i].clone());
                     }
 
+                    let result = match interpreter.execute_block(body, env) {
+                        Err(Error::Return(value)) => Ok(value),
+                        _ => Ok(Object::Nil),
+                    };
+
                     if *is_init {
                         return Ok(closure.get_at(0, String::from("this")));
                     }
 
-                    match interpreter.execute_block(body, env) {
-                        Err(Error::Return(value)) => {
-                            println!("Error value? {value}");
-                            Ok(value)
-                        }
-                        _ => Ok(Object::Nil),
-                    }
+                    result
                 } else {
                     unreachable!()
                 }

@@ -1,11 +1,10 @@
 class Person {
     init(name) {
         this.name = name;
-        print "Set this.name to name!";
     }
 
     introduction() {
-        print "Hello! My name is ";
+        print "Hello! My name is " + this.name;
     }
 }
 
@@ -13,6 +12,15 @@ class Dog {
   init(name, owner) {
     this.name = name;
     this.owner = owner;
+  }
+
+  newOwner(owner) {
+    print "Making new owner into " + owner.name;
+    this.owner = owner;
+  }
+
+  status() {
+    print "My owner is " + this.owner.name;
   }
 
   bark() {
@@ -25,3 +33,7 @@ owner.introduction();
 
 var pet = Dog("Sparky", owner);
 pet.bark();
+pet.status();
+
+pet.newOwner(Person("Jaran"));
+pet.status();
