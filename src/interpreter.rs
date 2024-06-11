@@ -438,7 +438,6 @@ impl Interpreter {
                 }
             }
             Expr::Get { object, name } => {
-                //println!("DEBUG {}", expr);
                 let object = self.evaluate(object)?;
                 if let Object::Instance(instance) = object {
                     let ret = instance.get(name.clone(), Rc::clone(&instance));
@@ -455,7 +454,6 @@ impl Interpreter {
                 name,
                 value,
             } => {
-                //println!("DEBUG {}", expr);
                 let mut object = self.evaluate(object)?;
 
                 if let Object::Instance(instance) = &mut object {
