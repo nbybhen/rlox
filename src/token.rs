@@ -107,6 +107,7 @@ pub struct Token {
     pub lexeme: String,
     pub literal: TokenLiteral,
     pub line: u32,
+    pub column: u32
 }
 
 impl fmt::Display for Token {

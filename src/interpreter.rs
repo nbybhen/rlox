@@ -38,7 +38,8 @@ impl std::fmt::Display for Object {
             }
             Object::Nil => write!(f, "Nil"),
             Object::String(s) => write!(f, "\"{s}\""),
-            _ => write!(f, "unformatted (Object)"),
+            Object::Number(n) => write!(f, "{n}"),
+            Object::Bool(b) => write!(f, "{b}"),
         }
     }
 }
@@ -175,7 +176,8 @@ impl Interpreter {
     fn decide(&mut self, stmt: &Stmt) -> Result<(), Error> {
         match stmt {
             Stmt::Print(e) => {
-                println!("{:?}", self.evaluate(e)?);
+                // println!("print");
+                println!("{}", self.evaluate(e)?);
             }
             Stmt::Expression(e) => {
                 self.evaluate(e)?;
@@ -202,6 +204,7 @@ impl Interpreter {
                 }
             }
             Stmt::While(condition, inner) => {
+                // println!("while");
                 while is_truthy(&self.evaluate(condition).unwrap()) {
                     self.decide(inner)?;
                 }
@@ -302,6 +305,7 @@ impl Interpreter {
     }
 
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, Error> {
+        // println!("{}", expr);
         match expr {
             Expr::Literal { value } => match value {
                 TokenLiteral::String(value) => Ok(Object::String(String::from(value))),

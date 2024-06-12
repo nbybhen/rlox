@@ -13,8 +13,13 @@ pub struct Environment {
 
 impl std::fmt::Display for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.enclosing.is_some() {
-            write!(f, "Environment values: (), enclosing: ()",)
+        if let Some(enc) = &self.enclosing {
+            let _ = write!(f, "Environment values: ");
+            for (key, _) in self.values.borrow().iter() {
+                let _ = write!(f, "{} -> <value>, ", key);
+            }
+            let _ = write!(f, "enclosing: {}", enc);
+            Ok(())
         } else {
             write!(f, "Environment values: ")?;
             for (key, _) in self.values.borrow().iter() {
@@ -89,6 +94,8 @@ impl Environment {
     }
 
     pub fn get_at(&self, dist: usize, name: String) -> Object {
+        // println!("Current Environment is {}", self);
+        // println!("looking for {} at {}", name, dist);
         self.ancestor(dist)
             .values
             .borrow()
