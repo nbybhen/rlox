@@ -2,9 +2,9 @@
 
 A Rust tree-walking implementation of [Lox](https://craftinginterpreters.com/) by Bob Nystrom.
 
-# Syntax
+## Syntax
 
-## Data Types
+### Data Types
 
 ```kt
 10; // Number (float)
@@ -13,7 +13,7 @@ true || false; // Boolean
 nil; // Nil (null)
 ```
 
-## Arithmetic
+### Arithmetic
 
 ```kt
 // Basic arithmetic operators implemented on the Number type

@@ -91,7 +91,7 @@ impl<'a> Scanner<'a> {
 
     fn scan_token(&mut self) -> () {
         let c = self.advance();
-        println!("Char {c} at col {}", self.column);
+        //println!("Char {c} at col {}", self.column);
 
         match c {
             '(' => self.add_token(TokenType::LeftParen),

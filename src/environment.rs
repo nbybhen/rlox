@@ -82,7 +82,7 @@ impl Environment {
             .insert(name.lexeme.clone(), value);
     }
 
-    fn ancestor(&self, dist: usize) -> Environment {
+    fn ancestor(&self, dist: usize) -> &Environment {
         let mut env = self;
         for _ in 0..dist {
             if let Some(inner) = env.enclosing.as_ref() {
@@ -90,7 +90,7 @@ impl Environment {
             }
         }
 
-        env.clone()
+        env
     }
 
     pub fn get_at(&self, dist: usize, name: String) -> Object {
