@@ -232,7 +232,7 @@ impl<'a> Parser<'a> {
         }
 
         self.consume(TokenType::Semicolon, String::from("Expected a semi-colon"))
-            .ok();
+            .ok()?;
         Some(Stmt::Var(name, initializer))
     }
 
@@ -250,7 +250,7 @@ impl<'a> Parser<'a> {
             loop {
                 if params.len() >= 255 {
                     self.app
-                        .error_token(self.peek(), "Can't have more than 255 parameters.");
+                        .error_token(self.peek(), String::from("Can't have more than 255 parameters."));
                 }
 
                 params.push(
@@ -485,7 +485,7 @@ impl<'a> Parser<'a> {
                         value: Box::new(value),
                     });
                 }
-                _ => self.app.error_token(equals, "Invalid assignment target."),
+                _ => self.app.error_token(equals, String::from("Invalid assignment target.")),
             }
         }
 
@@ -694,7 +694,7 @@ impl<'a> Parser<'a> {
             return Some(Expr::Super { keyword, method });
         }
 
-        self.app.error_token(self.peek(), "Expected expression.");
+        self.app.error_token(self.peek(), String::from("Expected expression."));
 
         None
     }
@@ -720,7 +720,7 @@ impl<'a> Parser<'a> {
             loop {
                 if arguments.len() >= 255 {
                     self.app
-                        .error_token(self.peek(), "Can't have more that 255 arguments");
+                        .error_token(self.peek(), String::from("Can't have more that 255 arguments"));
                     return None;
                 }
                 arguments.push(self.expression()?);
@@ -744,10 +744,12 @@ impl<'a> Parser<'a> {
         })
     }
 
+
     fn consume(&mut self, tokentype: TokenType, message: String) -> Result<Token, String> {
         if self.check(tokentype) {
             return Ok(self.advance());
         }
+        self.app.error_token(self.previous(), message.clone());
         Err(message)
     }
 

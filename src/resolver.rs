@@ -58,7 +58,7 @@ impl<'a> Resolver<'a> {
             if scope.contains_key(&name.lexeme) {
                 self.app.error_token(
                     name.clone(),
-                    "Already a variable with this name in this scope.",
+                    String::from("Already a variable with this name in this scope."),
                 );
             }
 
@@ -141,13 +141,13 @@ impl<'a> Resolver<'a> {
             Stmt::Return(keyword, value) => {
                 if self.current_function == FunctionType::None {
                     self.app
-                        .error_token(keyword.clone(), "Can't return from top-level code.");
+                        .error_token(keyword.clone(), String::from("Can't return from top-level code."));
                 }
                 if let Some(expr) = value {
                     if self.current_function == FunctionType::Initializer {
                         self.app.error_token(
                             keyword.clone(),
-                            "Can't return a value from an initializer.",
+                            String::from("Can't return a value from an initializer."),
                         )
                     }
                     self.resolve_expr(expr);
@@ -171,7 +171,7 @@ impl<'a> Resolver<'a> {
                     {
                         if name.lexeme == superclass_name.lexeme {
                             self.app
-                                .error_token(name.clone(), "A class can't inherit itself.");
+                                .error_token(name.clone(), String::from("A class can't inherit itself."));
                         }
                         self.current_class = ClassType::Subclass;
                         self.resolve_expr(superclass);
@@ -215,16 +215,16 @@ impl<'a> Resolver<'a> {
             Expr::Super { keyword, .. } => match self.current_class {
                 ClassType::None => self
                     .app
-                    .error_token(keyword.clone(), "Can't use 'super' outside of a class."),
+                    .error_token(keyword.clone(), String::from("Can't use 'super' outside of a class.")),
                 ClassType::Class => self
                     .app
-                    .error_token(keyword.clone(), "Can't use 'super' outside of a subclass."),
+                    .error_token(keyword.clone(), String::from("Can't use 'super' outside of a subclass.")),
                 ClassType::Subclass => self.resolve_local(expr, keyword),
             },
             Expr::This { keyword } => {
                 if self.current_class == ClassType::None {
                     self.app
-                        .error_token(keyword.clone(), "Can't use 'this' outside of a class.");
+                        .error_token(keyword.clone(), String::from("Can't use 'this' outside of a class."));
                 }
                 self.resolve_local(expr, keyword);
             }
@@ -234,7 +234,7 @@ impl<'a> Resolver<'a> {
                 {
                     self.app.error_token(
                         name.clone(),
-                        "Can't read local variable in its own initializer",
+                        String::from("Can't read local variable in its own initializer"),
                     );
                 }
                 //println!("Calling Resolve_local!");

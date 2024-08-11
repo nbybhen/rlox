@@ -35,11 +35,11 @@ impl App {
     }
 
     pub fn error(&self, line: u32, message: &str) {
-        self.report(line, String::new(), message);
+        self.report(line, String::new(), message.to_owned());
     }
 
     // Handles errors where the Token is displayed within the message
-    pub fn error_token(&self, token: Token, message: &str) {
+    pub fn error_token(&self, token: Token, message: String) {
         if token.tokentype == TokenType::EOF {
             self.report(token.line, String::from(" at end"), message);
         } else {
@@ -53,7 +53,7 @@ impl App {
     }
 
     // Reports errors to the user without panicking
-    fn report(&self, line: u32, loc: String, message: &str) {
+    fn report(&self, line: u32, loc: String, message: String) {
         eprintln!("[line {line}] Error{loc}: {message}");
         self.had_error.set(true);
     }
